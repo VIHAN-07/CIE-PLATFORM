@@ -1,7 +1,7 @@
 // ==========================================
 // AI Service — Production-Hardened
 // ==========================================
-// OpenAI / Gemini abstraction with:
+// OpenAI / Gemini / Groq abstraction with:
 // - Retry logic with exponential backoff
 // - Timeout protection
 // - Token limit enforcement
@@ -18,6 +18,9 @@ const {
   GEMINI_API_KEY,
   GEMINI_MODEL,
   GEMINI_BASE_URL,
+  GROQ_API_KEY,
+  GROQ_MODEL,
+  GROQ_BASE_URL,
   AI_TIMEOUT_MS,
   AI_MAX_RETRIES,
   AI_MAX_TOKENS,
@@ -44,6 +47,16 @@ if (GEMINI_API_KEY) {
   });
 }
 
+let groqClient = null;
+if (GROQ_API_KEY) {
+  groqClient = new OpenAI({
+    apiKey: GROQ_API_KEY,
+    baseURL: GROQ_BASE_URL,
+    timeout: AI_TIMEOUT_MS,
+    maxRetries: 0,
+  });
+}
+
 // ---- Core Chat Completion with Retry & Timeout ----
 
 async function chatCompletion(systemPrompt, userPrompt, options = {}) {
@@ -51,8 +64,12 @@ async function chatCompletion(systemPrompt, userPrompt, options = {}) {
   const temperature = options.temperature || 0.7;
   const maxRetries = AI_MAX_RETRIES;
 
-  const client = AI_PROVIDER === 'gemini' ? geminiClient : openaiClient;
-  const model = AI_PROVIDER === 'gemini' ? GEMINI_MODEL : OPENAI_MODEL;
+  const providerMap = {
+    gemini: { client: geminiClient, model: GEMINI_MODEL },
+    groq: { client: groqClient, model: GROQ_MODEL },
+    openai: { client: openaiClient, model: OPENAI_MODEL },
+  };
+  const { client, model } = providerMap[AI_PROVIDER] || providerMap.openai;
 
   if (!client) {
     throw Object.assign(
