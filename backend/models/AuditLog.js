@@ -48,6 +48,12 @@ const auditLogSchema = new mongoose.Schema(
         'USER_UPDATE',
         'USER_DEACTIVATE',
         'USER_ACTIVATE',
+        // Student operations
+        'STUDENT_CREATE',
+        'STUDENT_DELETE',
+        // Template operations
+        'TEMPLATE_CREATE',
+        'TEMPLATE_DELETE',
         // Data operations
         'STUDENTS_IMPORT',
         'RESULTS_EXPORT',
@@ -69,7 +75,7 @@ const auditLogSchema = new mongoose.Schema(
     // What entity was affected
     entityType: {
       type: String,
-      enum: ['Activity', 'ActivityRubric', 'Score', 'User', 'Student', 'Subject', 'AIReport', 'System'],
+      enum: ['Activity', 'ActivityRubric', 'ActivityTemplate', 'Score', 'User', 'Student', 'Subject', 'AIReport', 'System'],
     },
     entityId: {
       type: mongoose.Schema.Types.ObjectId,

@@ -101,7 +101,7 @@ exports.saveBulk = async (req, res, next) => {
 
     audit.log({
       req,
-      action: 'SCORE_UPDATE',
+      action: 'SCORES_BULK_SAVE',
       entityType: 'Score',
       entityId: activityId,
       description: `Bulk scores saved: ${scores.length} entries for activity ${activity.name}`,
@@ -145,7 +145,7 @@ exports.recompute = async (req, res, next) => {
 
     audit.log({
       req,
-      action: 'SCORE_RECOMPUTE',
+      action: 'SCORES_RECOMPUTE',
       entityType: 'FinalSubjectResult',
       entityId: subject._id,
       description: `Subject results recomputed for ${students.length} students`,

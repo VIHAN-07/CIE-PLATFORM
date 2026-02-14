@@ -153,7 +153,7 @@ exports.importExcel = async (req, res, next) => {
 
     audit.log({
       req,
-      action: 'STUDENT_IMPORT',
+      action: 'STUDENTS_IMPORT',
       entityType: 'Student',
       entityId: classId,
       description: `Excel import: ${results.created} created, ${results.updated} updated, ${results.skipped} skipped`,

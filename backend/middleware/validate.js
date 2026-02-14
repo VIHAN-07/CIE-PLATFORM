@@ -98,7 +98,9 @@ const schemas = {
     body: z.object({
       name: trimStr.min(2).max(200),
       activityType: trimStr.min(2).max(100),
-      subject: objectId,
+      subjectName: trimStr.min(2).max(200),
+      classId: objectId,
+      academicYearId: objectId,
       totalMarks: z.number().min(1).max(1000),
       topic: trimStr.max(500).optional().default(''),
       guidelines: z.string().max(10000).optional().default(''),

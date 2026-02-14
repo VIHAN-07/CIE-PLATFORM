@@ -10,20 +10,26 @@ import Modal from '../components/Modal';
 export default function ClassesPage() {
   const [classes, setClasses] = useState([]);
   const [years, setYears] = useState([]);
+  const [selectedYear, setSelectedYear] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ name: '', academicYear: '', department: '' });
   const [editId, setEditId] = useState(null);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { loadYears(); }, []);
+  useEffect(() => { if (selectedYear) loadClasses(); }, [selectedYear]);
 
-  const load = async () => {
-    const [cls, yr] = await Promise.all([
-      api.get('/classes'),
-      api.get('/academic-years'),
-    ]);
-    setClasses(cls.data);
-    setYears(yr.data);
+  const loadYears = async () => {
+    const { data } = await api.get('/academic-years');
+    setYears(data);
+    if (data.length) setSelectedYear(data[0]._id);
   };
+
+  const loadClasses = async () => {
+    const { data } = await api.get(`/classes?academicYear=${selectedYear}`);
+    setClasses(data);
+  };
+
+  const load = () => { loadYears(); };
 
   const openNew = () => {
     setForm({ name: '', academicYear: years[0]?._id || '', department: '' });
@@ -73,7 +79,12 @@ export default function ClassesPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Classes</h1>
-        <button onClick={openNew} className="btn-primary">+ Add Class</button>
+        <div className="flex gap-3 items-center">
+          <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} className="input w-48">
+            {years.map((y) => <option key={y._id} value={y._id}>{y.name}</option>)}
+          </select>
+          <button onClick={openNew} className="btn-primary">+ Add Class</button>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border overflow-hidden">

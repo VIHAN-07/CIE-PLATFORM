@@ -42,7 +42,7 @@ export default function App() {
         <Route path="academic-years" element={<ProtectedRoute adminOnly><AcademicYearsPage /></ProtectedRoute>} />
         <Route path="classes" element={<ProtectedRoute adminOnly><ClassesPage /></ProtectedRoute>} />
         <Route path="subjects" element={<SubjectsPage />} />
-        <Route path="students" element={<StudentsPage />} />
+        <Route path="students" element={<ProtectedRoute adminOnly><StudentsPage /></ProtectedRoute>} />
         <Route path="activities" element={<ActivitiesPage />} />
         <Route path="activities/:id" element={<ActivityDetailPage />} />
         <Route path="grading/:activityId" element={<GradingPage />} />

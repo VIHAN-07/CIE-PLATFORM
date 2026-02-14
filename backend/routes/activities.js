@@ -14,7 +14,7 @@ router.post('/', auth, validate('activityCreate'), ctrl.create);
 router.put('/:id', auth, validate('activityUpdate'), ctrl.update);
 router.delete('/:id', auth, ctrl.remove);
 router.post('/:id/submit', auth, ctrl.submit);
-router.post('/:id/lock', auth, roleCheck('admin'), ctrl.lock);
+router.post('/:id/lock', auth, roleCheck('admin', 'faculty'), ctrl.lock);
 router.post('/:id/unlock', auth, roleCheck('admin', 'faculty'), ctrl.unlock);
 
 module.exports = router;

@@ -6,8 +6,10 @@ import { useState, useEffect } from 'react';
 import api from '../api/axios';
 import toast from 'react-hot-toast';
 import Modal from '../components/Modal';
+import { useAuth } from '../context/AuthContext';
 
 export default function StudentsPage() {
+  const { isAdmin } = useAuth();
   const [students, setStudents] = useState([]);
   const [classes, setClasses] = useState([]);
   const [years, setYears] = useState([]);
@@ -17,7 +19,10 @@ export default function StudentsPage() {
   const [importFile, setImportFile] = useState(null);
   const [importing, setImporting] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingStudent, setEditingStudent] = useState(null);
   const [form, setForm] = useState({ rollNo: '', name: '' });
+  const [editForm, setEditForm] = useState({ rollNo: '', name: '' });
 
   useEffect(() => { loadMeta(); }, []);
   useEffect(() => { if (selectedClass && selectedYear) loadStudents(); }, [selectedClass, selectedYear]);
@@ -87,14 +92,35 @@ export default function StudentsPage() {
     }
   };
 
+  const openEdit = (student) => {
+    setEditingStudent(student);
+    setEditForm({ rollNo: student.rollNo, name: student.name });
+    setShowEditModal(true);
+  };
+
+  const handleEditStudent = async (e) => {
+    e.preventDefault();
+    try {
+      await api.put(`/students/${editingStudent._id}`, editForm);
+      toast.success('Student updated!');
+      setShowEditModal(false);
+      setEditingStudent(null);
+      loadStudents();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Error updating');
+    }
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Students</h1>
-        <div className="flex gap-2">
-          <button onClick={() => setShowImport(true)} className="btn-secondary">📥 Import Excel</button>
-          <button onClick={() => setShowAddModal(true)} className="btn-primary">+ Add Student</button>
-        </div>
+        {isAdmin && (
+          <div className="flex gap-2">
+            <button onClick={() => setShowImport(true)} className="btn-secondary">📥 Import Excel</button>
+            <button onClick={() => setShowAddModal(true)} className="btn-primary">+ Add Student</button>
+          </div>
+        )}
       </div>
 
       {/* Filters */}
@@ -116,7 +142,7 @@ export default function StudentsPage() {
               <th className="px-6 py-3 text-left font-medium text-gray-500">#</th>
               <th className="px-6 py-3 text-left font-medium text-gray-500">Roll No</th>
               <th className="px-6 py-3 text-left font-medium text-gray-500">Name</th>
-              <th className="px-6 py-3 text-right font-medium text-gray-500">Actions</th>
+              {isAdmin && <th className="px-6 py-3 text-right font-medium text-gray-500">Actions</th>}
             </tr>
           </thead>
           <tbody className="divide-y">
@@ -125,9 +151,12 @@ export default function StudentsPage() {
                 <td className="px-6 py-3 text-gray-400">{idx + 1}</td>
                 <td className="px-6 py-3 font-medium">{s.rollNo}</td>
                 <td className="px-6 py-3">{s.name}</td>
-                <td className="px-6 py-3 text-right">
-                  <button onClick={() => handleDelete(s._id)} className="text-red-600 hover:underline text-sm">Delete</button>
-                </td>
+                {isAdmin && (
+                  <td className="px-6 py-3 text-right space-x-2">
+                    <button onClick={() => openEdit(s)} className="text-primary-600 hover:underline text-sm">Edit</button>
+                    <button onClick={() => handleDelete(s._id)} className="text-red-600 hover:underline text-sm">Delete</button>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -168,6 +197,24 @@ export default function StudentsPage() {
           <div className="flex justify-end gap-3">
             <button type="button" onClick={() => setShowAddModal(false)} className="btn-secondary">Cancel</button>
             <button type="submit" className="btn-primary">Add</button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Edit Student Modal */}
+      <Modal show={showEditModal} onClose={() => setShowEditModal(false)} title="Edit Student">
+        <form onSubmit={handleEditStudent} className="space-y-4">
+          <div>
+            <label className="label">Roll No</label>
+            <input value={editForm.rollNo} onChange={(e) => setEditForm({ ...editForm, rollNo: e.target.value })} required className="input" />
+          </div>
+          <div>
+            <label className="label">Name</label>
+            <input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} required className="input" />
+          </div>
+          <div className="flex justify-end gap-3">
+            <button type="button" onClick={() => setShowEditModal(false)} className="btn-secondary">Cancel</button>
+            <button type="submit" className="btn-primary">Save</button>
           </div>
         </form>
       </Modal>

@@ -29,8 +29,8 @@ exports.create = async (req, res, next) => {
 
     const activity = await Activity.findById(activityId);
     if (!activity) return res.status(404).json({ success: false, message: 'Activity not found.' });
-    if (activity.status === 'locked') {
-      return res.status(400).json({ success: false, message: 'Cannot modify rubrics on a locked activity.' });
+    if (activity.status !== 'draft') {
+      return res.status(400).json({ success: false, message: 'Rubrics can only be added to activities in draft status.' });
     }
 
     const count = await ActivityRubric.countDocuments({ activity: activityId });

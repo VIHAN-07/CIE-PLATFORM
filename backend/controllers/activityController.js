@@ -11,6 +11,7 @@ const Student = require('../models/Student');
 const audit = require('../services/auditService');
 const { recomputeSubjectResults } = require('../services/scoringEngine');
 const logger = require('../services/logger');
+const DEFAULT_RUBRICS = require('../config/defaultRubrics');
 
 /** GET /api/activities */
 exports.getAll = async (req, res, next) => {
@@ -55,29 +56,48 @@ exports.getById = async (req, res, next) => {
 /** POST /api/activities */
 exports.create = async (req, res, next) => {
   try {
-    const { name, activityType, subject, totalMarks, topic, guidelines } = req.body;
+    const { name, activityType, subjectName, classId, academicYearId, totalMarks, topic, guidelines } = req.body;
 
-    // Verify faculty owns the subject
-    const subjectDoc = await Subject.findById(subject);
-    if (!subjectDoc) return res.status(404).json({ success: false, message: 'Subject not found.' });
-    if (req.user.role === 'faculty' && subjectDoc.faculty.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ success: false, message: 'You are not assigned to this subject.' });
+    // Find or create subject by name for this faculty/class/year
+    let subjectDoc = await Subject.findOne({
+      name: { $regex: new RegExp(`^${subjectName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+      class: classId,
+      academicYear: academicYearId,
+    });
+
+    if (!subjectDoc) {
+      // Auto-create subject with a generated code
+      const code = subjectName.replace(/[^A-Za-z0-9]/g, '').substring(0, 8).toUpperCase() || 'SUBJ';
+      subjectDoc = await Subject.create({
+        name: subjectName,
+        code,
+        class: classId,
+        academicYear: academicYearId,
+        faculty: req.user._id,
+      });
     }
 
     const activity = await Activity.create({
       name,
       activityType,
-      subject,
+      subject: subjectDoc._id,
       faculty: req.user._id,
       totalMarks,
       topic,
       guidelines,
     });
 
-    // Auto-copy rubrics from template
+    // Auto-copy rubrics from template or use built-in defaults
     const template = await ActivityTemplate.findOne({ activityType });
-    if (template && template.defaultRubrics.length > 0) {
-      const rubricDocs = template.defaultRubrics.map((r, idx) => ({
+    let rubricSource = template?.defaultRubrics;
+
+    // Fallback to built-in default rubrics if no template exists
+    if (!rubricSource || rubricSource.length === 0) {
+      rubricSource = DEFAULT_RUBRICS[activityType] || DEFAULT_RUBRICS['Other'] || [];
+    }
+
+    if (rubricSource.length > 0) {
+      const rubricDocs = rubricSource.map((r, idx) => ({
         activity: activity._id,
         name: r.name,
         criteria: r.criteria,
@@ -92,7 +112,7 @@ exports.create = async (req, res, next) => {
       entityType: 'Activity',
       entityId: activity._id,
       description: `Activity created: ${name} (${activityType})`,
-      newValue: { name, activityType, subject, totalMarks },
+      newValue: { name, activityType, subject: subjectDoc._id, totalMarks },
     });
 
     res.status(201).json(activity);
@@ -193,6 +213,11 @@ exports.lock = async (req, res, next) => {
     const activity = await Activity.findById(req.params.id);
     if (!activity) return res.status(404).json({ success: false, message: 'Activity not found.' });
 
+    // Faculty can only lock their own activities
+    if (req.user.role === 'faculty' && activity.faculty.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Access denied. You can only lock your own activities.' });
+    }
+
     activity.status = 'locked';
     activity.lockedAt = new Date();
     await activity.save();
@@ -218,6 +243,11 @@ exports.unlock = async (req, res, next) => {
   try {
     const activity = await Activity.findById(req.params.id);
     if (!activity) return res.status(404).json({ success: false, message: 'Activity not found.' });
+
+    // Only admin or the owning faculty can unlock
+    if (req.user.role === 'faculty' && activity.faculty.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Access denied. You can only unlock your own activities.' });
+    }
 
     activity.status = 'draft';
     activity.unlockedBy = req.user._id;

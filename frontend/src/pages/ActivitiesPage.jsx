@@ -7,36 +7,45 @@ import { Link, useSearchParams } from 'react-router-dom';
 import api from '../api/axios';
 import toast from 'react-hot-toast';
 import Modal from '../components/Modal';
+import { useAuth } from '../context/AuthContext';
 
 const ACTIVITY_TYPES = ['PPT', 'Flip Classroom', 'GD', 'Viva', 'Lab', 'Assignment', 'Quiz', 'Project', 'Seminar', 'Other'];
 
 export default function ActivitiesPage() {
+  const { isAdmin } = useAuth();
   const [searchParams] = useSearchParams();
-  const subjectFilter = searchParams.get('subject') || '';
   const [activities, setActivities] = useState([]);
-  const [subjects, setSubjects] = useState([]);
-  const [selectedSubject, setSelectedSubject] = useState(subjectFilter);
+  const [classes, setClasses] = useState([]);
+  const [years, setYears] = useState([]);
   const [showModal, setShowModal] = useState(false);
-  const [form, setForm] = useState({ name: '', activityType: 'PPT', subject: '', totalMarks: 10, topic: '' });
+  const [form, setForm] = useState({ name: '', activityType: 'PPT', subjectName: '', classId: '', academicYearId: '', totalMarks: 10, topic: '' });
   const [aiLoading, setAiLoading] = useState(false);
+  const [facultyFilter, setFacultyFilter] = useState('all');
+  const [facultySearch, setFacultySearch] = useState('');
 
-  useEffect(() => { loadSubjects(); }, []);
-  useEffect(() => { loadActivities(); }, [selectedSubject]);
+  useEffect(() => { loadMeta(); }, []);
 
-  const loadSubjects = async () => {
-    const { data } = await api.get('/subjects');
-    setSubjects(data);
-    if (!selectedSubject && data.length) setSelectedSubject(data[0]._id);
+  const loadMeta = async () => {
+    const [c, y] = await Promise.all([api.get('/classes'), api.get('/academic-years')]);
+    setClasses(c.data);
+    setYears(y.data);
+    if (c.data.length) setForm((f) => ({ ...f, classId: c.data[0]._id }));
+    if (y.data.length) setForm((f) => ({ ...f, academicYearId: y.data[0]._id }));
+    loadActivities();
   };
 
   const loadActivities = async () => {
-    if (!selectedSubject) return;
-    const { data } = await api.get(`/activities?subject=${selectedSubject}`);
+    const { data } = await api.get('/activities');
     setActivities(data);
   };
 
   const openCreate = () => {
-    setForm({ name: '', activityType: 'PPT', subject: selectedSubject, totalMarks: 10, topic: '' });
+    setForm({
+      name: '', activityType: 'PPT', subjectName: '',
+      classId: classes.length ? classes[0]._id : '',
+      academicYearId: years.length ? years[0]._id : '',
+      totalMarks: 10, topic: '',
+    });
     setShowModal(true);
   };
 
@@ -69,6 +78,41 @@ export default function ActivitiesPage() {
     }
   };
 
+  // Get unique faculty list for admin filter
+  const facultyList = isAdmin
+    ? [...new Map(activities.filter(a => a.faculty).map(a => [a.faculty._id, a.faculty])).values()]
+    : [];
+
+  // Group activities by faculty for admin view
+  const getGroupedActivities = () => {
+    let filtered = facultyFilter === 'all'
+      ? activities
+      : activities.filter(a => a.faculty?._id === facultyFilter);
+
+    // Apply faculty search
+    if (isAdmin && facultySearch.trim()) {
+      const q = facultySearch.trim().toLowerCase();
+      filtered = filtered.filter(a =>
+        a.faculty?.name?.toLowerCase().includes(q) ||
+        a.faculty?.email?.toLowerCase().includes(q)
+      );
+    }
+
+    if (!isAdmin) return [{ faculty: null, items: filtered }];
+
+    const groups = {};
+    filtered.forEach(a => {
+      const fId = a.faculty?._id || 'unknown';
+      const fName = a.faculty?.name || 'Unknown Faculty';
+      const fEmail = a.faculty?.email || '';
+      if (!groups[fId]) groups[fId] = { faculty: { _id: fId, name: fName, email: fEmail }, items: [] };
+      groups[fId].items.push(a);
+    });
+    return Object.values(groups).sort((a, b) => a.faculty.name.localeCompare(b.faculty.name));
+  };
+
+  const grouped = getGroupedActivities();
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -76,48 +120,80 @@ export default function ActivitiesPage() {
         <button onClick={openCreate} className="btn-primary">+ Create Activity</button>
       </div>
 
-      {/* Subject Filter */}
-      <div className="mb-6">
-        <select
-          value={selectedSubject}
-          onChange={(e) => setSelectedSubject(e.target.value)}
-          className="input w-80"
-        >
-          {subjects.map((s) => (
-            <option key={s._id} value={s._id}>{s.name} ({s.code})</option>
-          ))}
-        </select>
-      </div>
-
-      {/* Activities List */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {activities.map((a) => (
-          <Link key={a._id} to={`/activities/${a._id}`}
-            className="bg-white rounded-xl shadow-sm border p-5 hover:shadow-md transition group"
+      {/* Admin: Faculty filter & search */}
+      {isAdmin && facultyList.length > 0 && (
+        <div className="flex items-center gap-3 mb-6 flex-wrap">
+          <label className="text-sm font-medium text-gray-600">Filter by Faculty:</label>
+          <select
+            value={facultyFilter}
+            onChange={(e) => setFacultyFilter(e.target.value)}
+            className="input w-64"
           >
-            <div className="flex items-start justify-between mb-2">
-              <h3 className="font-semibold text-gray-900 group-hover:text-primary-600">{a.name}</h3>
-              <span className={`text-xs px-2 py-1 rounded-full ${
-                a.status === 'draft' ? 'bg-yellow-100 text-yellow-700' :
-                a.status === 'submitted' ? 'bg-green-100 text-green-700' :
-                'bg-red-100 text-red-700'
-              }`}>
-                {a.status}
-              </span>
+            <option value="all">All Faculty ({activities.length} activities)</option>
+            {facultyList.map(f => (
+              <option key={f._id} value={f._id}>
+                {f.name} ({activities.filter(a => a.faculty?._id === f._id).length})
+              </option>
+            ))}
+          </select>
+          <input
+            value={facultySearch}
+            onChange={(e) => { setFacultySearch(e.target.value); setFacultyFilter('all'); }}
+            placeholder="🔍 Search faculty name..."
+            className="input w-64"
+          />
+        </div>
+      )}
+
+      {/* Activities grouped by faculty (admin) or flat list (faculty) */}
+      {grouped.map((group, gIdx) => (
+        <div key={group.faculty?._id || gIdx} className="mb-8">
+          {isAdmin && group.faculty && (
+            <div className="flex items-center gap-3 mb-3 pb-2 border-b border-gray-200">
+              <div className="w-8 h-8 rounded-full bg-primary-600 flex items-center justify-center text-white font-bold text-sm">
+                {group.faculty.name?.charAt(0)?.toUpperCase()}
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-800">{group.faculty.name}</h2>
+                <p className="text-xs text-gray-400">{group.faculty.email} · {group.items.length} activit{group.items.length === 1 ? 'y' : 'ies'}</p>
+              </div>
             </div>
-            <p className="text-sm text-gray-500">{a.activityType}</p>
-            <p className="text-sm text-gray-500 mt-1">Total Marks: <strong>{a.totalMarks}</strong></p>
-            <div className="mt-3 flex gap-2">
-              <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
-                {a.subject?.code}
-              </span>
-            </div>
-          </Link>
-        ))}
-      </div>
+          )}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {group.items.map((a) => (
+              <Link key={a._id} to={`/activities/${a._id}`}
+                className="bg-white rounded-xl shadow-sm border p-5 hover:shadow-md transition group"
+              >
+                <div className="flex items-start justify-between mb-2">
+                  <h3 className="font-semibold text-gray-900 group-hover:text-primary-600">{a.name}</h3>
+                  <span className={`text-xs px-2 py-1 rounded-full ${
+                    a.status === 'draft' ? 'bg-yellow-100 text-yellow-700' :
+                    a.status === 'submitted' ? 'bg-green-100 text-green-700' :
+                    'bg-red-100 text-red-700'
+                  }`}>
+                    {a.status}
+                  </span>
+                </div>
+                <p className="text-sm text-gray-500">{a.activityType}</p>
+                <p className="text-sm text-gray-500 mt-1">Total Marks: <strong>{a.totalMarks}</strong></p>
+                <div className="mt-3 flex gap-2">
+                  <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
+                    {a.subject?.code || a.subject?.name}
+                  </span>
+                  {isAdmin && a.faculty && (
+                    <span className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded">
+                      {a.faculty.name}
+                    </span>
+                  )}
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      ))}
 
       {activities.length === 0 && (
-        <div className="text-center text-gray-400 py-12">No activities for this subject.</div>
+        <div className="text-center text-gray-400 py-12">No activities yet. Create one to get started.</div>
       )}
 
       {/* Create Activity Modal */}
@@ -135,11 +211,21 @@ export default function ActivitiesPage() {
               </select>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="label">Subject Name</label>
+            <input value={form.subjectName} onChange={(e) => setForm({ ...form, subjectName: e.target.value })} required className="input" placeholder="e.g. Data Structures & Algorithms" />
+          </div>
+          <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="label">Subject</label>
-              <select value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} required className="input">
-                {subjects.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
+              <label className="label">Class</label>
+              <select value={form.classId} onChange={(e) => setForm({ ...form, classId: e.target.value })} required className="input">
+                {classes.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label">Academic Year</label>
+              <select value={form.academicYearId} onChange={(e) => setForm({ ...form, academicYearId: e.target.value })} required className="input">
+                {years.map((y) => <option key={y._id} value={y._id}>{y.name}</option>)}
               </select>
             </div>
             <div>

@@ -16,7 +16,7 @@ export default function UsersPage() {
 
   const load = async () => {
     const { data } = await api.get('/admin/users');
-    setUsers(data);
+    setUsers(data.users || data);
   };
 
   const handleRegister = async (e) => {

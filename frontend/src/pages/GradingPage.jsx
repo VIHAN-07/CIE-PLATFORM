@@ -9,6 +9,7 @@ import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
 import api from '../api/axios';
 import toast from 'react-hot-toast';
+import { HiDownload } from 'react-icons/hi';
 
 export default function GradingPage() {
   const { activityId } = useParams();
@@ -150,6 +151,47 @@ export default function GradingPage() {
     });
   }, [rubrics, activity]);
 
+  // Export grading data as CSV (Excel-compatible)
+  const handleExportExcel = useCallback(() => {
+    if (!rowData.length) {
+      toast.error('No data to export');
+      return;
+    }
+
+    // Build header row
+    const headers = ['Roll No', 'Name'];
+    rubrics.forEach((rub) => headers.push(rub.name));
+    headers.push(`Score (/${activity?.totalMarks || 0})`);
+
+    // Build data rows
+    const csvRows = [headers.join(',')];
+    rowData.forEach((row) => {
+      const cells = [
+        `"${row.rollNo}"`,
+        `"${row.name}"`,
+      ];
+      rubrics.forEach((rub) => {
+        cells.push(row[`rubric_${rub._id}`] || 0);
+      });
+      cells.push(row.activityScore || 0);
+      csvRows.push(cells.join(','));
+    });
+
+    // Download as CSV file
+    const csvContent = '\uFEFF' + csvRows.join('\n'); // BOM for Excel UTF-8
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const fileName = `${activity?.name || 'grading'}_${activity?.subject?.name || 'scores'}.csv`.replace(/\s+/g, '_');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast.success('Exported to CSV successfully!');
+  }, [rowData, rubrics, activity]);
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -161,6 +203,9 @@ export default function GradingPage() {
         </div>
         <div className="flex gap-3">
           <Link to={`/activities/${activityId}`} className="btn-secondary">← Back</Link>
+          <button onClick={handleExportExcel} className="btn-secondary flex items-center gap-1">
+            <HiDownload className="w-4 h-4" /> Export CSV
+          </button>
           <button onClick={handleSave} disabled={saving || activity?.status === 'locked'} className="btn-primary">
             {saving ? '💾 Saving...' : '💾 Save All Scores'}
           </button>

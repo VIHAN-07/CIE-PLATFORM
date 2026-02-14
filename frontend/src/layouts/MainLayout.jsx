@@ -70,12 +70,11 @@ export default function MainLayout() {
           )}
 
           <p className="px-4 pt-4 pb-1 text-xs text-gray-500 uppercase tracking-wider">Academics</p>
-          <NavLink to="/subjects" className={navItemClass}>
-            <HiOutlineBookOpen className="w-5 h-5" /> Subjects
-          </NavLink>
-          <NavLink to="/students" className={navItemClass}>
-            <HiOutlineUserGroup className="w-5 h-5" /> Students
-          </NavLink>
+          {isAdmin && (
+            <NavLink to="/students" className={navItemClass}>
+              <HiOutlineUserGroup className="w-5 h-5" /> Students
+            </NavLink>
+          )}
           <NavLink to="/activities" className={navItemClass}>
             <HiOutlineClipboardList className="w-5 h-5" /> Activities
           </NavLink>

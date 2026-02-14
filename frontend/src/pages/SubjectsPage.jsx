@@ -14,27 +14,35 @@ export default function SubjectsPage() {
   const [subjects, setSubjects] = useState([]);
   const [classes, setClasses] = useState([]);
   const [years, setYears] = useState([]);
+  const [selectedYear, setSelectedYear] = useState('');
   const [faculty, setFaculty] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ name: '', code: '', class: '', academicYear: '', faculty: '' });
   const [editId, setEditId] = useState(null);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { loadMeta(); }, []);
+  useEffect(() => { if (selectedYear) loadSubjects(); }, [selectedYear]);
 
-  const load = async () => {
-    const { data } = await api.get('/subjects');
-    setSubjects(data);
+  const loadMeta = async () => {
+    const { data: yr } = await api.get('/academic-years');
+    setYears(yr);
+    if (yr.length) setSelectedYear(yr[0]._id);
     if (isAdmin) {
-      const [c, y, f] = await Promise.all([
+      const [c, f] = await Promise.all([
         api.get('/classes'),
-        api.get('/academic-years'),
         api.get('/admin/faculty'),
       ]);
       setClasses(c.data);
-      setYears(y.data);
       setFaculty(f.data);
     }
   };
+
+  const loadSubjects = async () => {
+    const { data } = await api.get(`/subjects?academicYear=${selectedYear}`);
+    setSubjects(data);
+  };
+
+  const load = () => { loadMeta(); };
 
   const openNew = () => {
     setForm({ name: '', code: '', class: classes[0]?._id || '', academicYear: years[0]?._id || '', faculty: faculty[0]?._id || '' });
@@ -63,7 +71,12 @@ export default function SubjectsPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Subjects</h1>
-        {isAdmin && <button onClick={openNew} className="btn-primary">+ Add Subject</button>}
+        <div className="flex gap-3 items-center">
+          <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} className="input w-48">
+            {years.map((y) => <option key={y._id} value={y._id}>{y.name}</option>)}
+          </select>
+          {isAdmin && <button onClick={openNew} className="btn-primary">+ Add Subject</button>}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

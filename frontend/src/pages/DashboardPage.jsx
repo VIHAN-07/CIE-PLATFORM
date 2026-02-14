@@ -32,10 +32,19 @@ export default function DashboardPage() {
   const [stats, setStats] = useState(null);
   const [subjects, setSubjects] = useState([]);
   const [activities, setActivities] = useState([]);
+  const [years, setYears] = useState([]);
+  const [selectedYear, setSelectedYear] = useState('');
 
   useEffect(() => {
-    loadData();
+    api.get('/academic-years').then(({ data }) => {
+      setYears(data);
+      if (data.length) setSelectedYear(data[0]._id);
+    });
   }, []);
+
+  useEffect(() => {
+    if (selectedYear) loadData();
+  }, [selectedYear]);
 
   const loadData = async () => {
     try {
@@ -43,10 +52,13 @@ export default function DashboardPage() {
         const { data } = await api.get('/admin/stats');
         setStats(data);
       }
-      const { data: subData } = await api.get('/subjects');
+      const { data: subData } = await api.get(`/subjects?academicYear=${selectedYear}`);
       setSubjects(subData);
       const { data: actData } = await api.get('/activities');
-      setActivities(actData.slice(0, 10)); // latest 10
+      // Filter activities to only those belonging to subjects in this year
+      const subjectIds = new Set(subData.map((s) => s._id));
+      const filtered = actData.filter((a) => subjectIds.has(a.subject?._id || a.subject));
+      setActivities(filtered.slice(0, 10));
     } catch (err) {
       console.error(err);
     }
@@ -54,11 +66,16 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Welcome, {user?.name}!</h1>
-        <p className="text-gray-500 mt-1">
-          {isAdmin ? 'Admin Dashboard' : 'Faculty Dashboard'} — CIE Evaluation Platform
-        </p>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Welcome, {user?.name}!</h1>
+          <p className="text-gray-500 mt-1">
+            {isAdmin ? 'Admin Dashboard' : 'Faculty Dashboard'} — CIE Evaluation Platform
+          </p>
+        </div>
+        <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} className="input w-48">
+          {years.map((y) => <option key={y._id} value={y._id}>{y.name}</option>)}
+        </select>
       </div>
 
       {/* Admin Stats */}

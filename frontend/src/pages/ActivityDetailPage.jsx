@@ -8,6 +8,7 @@ import { useAuth } from '../context/AuthContext';
 import api from '../api/axios';
 import toast from 'react-hot-toast';
 import RubricEditor from '../components/RubricEditor';
+import ConductionGuidelines from '../components/ConductionGuidelines';
 
 export default function ActivityDetailPage() {
   const { id } = useParams();
@@ -131,7 +132,12 @@ export default function ActivityDetailPage() {
         )}
       </div>
 
-      {/* Guidelines */}
+      {/* Conduction Guidelines */}
+      <div className="mb-6">
+        <ConductionGuidelines activityType={activity.activityType} collapsible />
+      </div>
+
+      {/* Custom Guidelines */}
       {activity.guidelines && (
         <div className="bg-blue-50 rounded-xl p-5 mb-6">
           <h3 className="font-semibold text-blue-900 mb-2">📋 Guidelines</h3>
