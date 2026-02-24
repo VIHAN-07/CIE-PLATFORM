@@ -18,6 +18,9 @@ import ResultsPage from './pages/ResultsPage';
 import AIToolsPage from './pages/AIToolsPage';
 import UsersPage from './pages/UsersPage';
 import TemplatesPage from './pages/TemplatesPage';
+import QuizBuilderPage from './pages/QuizBuilderPage';
+import QuizAttemptPage from './pages/QuizAttemptPage';
+import QuizResultsPage from './pages/QuizResultsPage';
 
 function ProtectedRoute({ children, adminOnly = false }) {
   const { user, loading } = useAuth();
@@ -37,6 +40,8 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      {/* Public quiz attempt route — NO auth required */}
+      <Route path="/quiz/attempt/:token" element={<QuizAttemptPage />} />
       <Route path="/" element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
         <Route index element={<DashboardPage />} />
         <Route path="academic-years" element={<ProtectedRoute adminOnly><AcademicYearsPage /></ProtectedRoute>} />
@@ -50,6 +55,9 @@ export default function App() {
         <Route path="ai-tools" element={<AIToolsPage />} />
         <Route path="users" element={<ProtectedRoute adminOnly><UsersPage /></ProtectedRoute>} />
         <Route path="templates" element={<ProtectedRoute adminOnly><TemplatesPage /></ProtectedRoute>} />
+        {/* Quiz module routes (faculty) */}
+        <Route path="quiz/builder/:activityId" element={<QuizBuilderPage />} />
+        <Route path="quiz/results/:activityId" element={<QuizResultsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

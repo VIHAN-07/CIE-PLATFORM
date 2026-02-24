@@ -85,6 +85,7 @@ app.use('/api/scores', require('./routes/scores'));
 app.use('/api/exports', require('./routes/exports'));
 app.use('/api/ai', require('./routes/ai'));
 app.use('/api/admin', require('./routes/admin'));
+app.use('/api/quiz', require('./routes/quiz'));
 
 // Enhanced health check with DB status
 app.get('/api/health', async (req, res) => {

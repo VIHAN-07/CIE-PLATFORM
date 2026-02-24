@@ -249,6 +249,55 @@ const schemas = {
       limit: z.string().regex(/^\d+$/).transform(Number).optional(),
     }).passthrough(),
   }),
+
+  // ---- Quiz Module Schemas ----
+
+  quizQuestionCreate: z.object({
+    body: z.object({
+      activityId: objectId,
+      questionType: z.enum(['mcq', 'short', 'descriptive']),
+      questionText: trimStr.min(2).max(5000),
+      options: z.array(
+        z.object({
+          label: trimStr.min(1).max(1000),
+          isCorrect: z.boolean().default(false),
+        })
+      ).optional().default([]),
+      expectedAnswer: z.string().max(2000).optional().default(''),
+      marks: z.number().min(1).max(1000),
+      allowPartialScoring: z.boolean().optional().default(false),
+    }),
+  }),
+
+  quizGenerateLink: z.object({
+    body: z.object({
+      activityId: objectId,
+      expiresInHours: z.number().min(0.5).max(720).optional(),
+      maxAttempts: z.number().int().min(0).max(100).optional().default(1),
+      allowMultipleAttempts: z.boolean().optional().default(false),
+    }),
+  }),
+
+  quizAttemptSubmit: z.object({
+    body: z.object({
+      rollNo: trimStr.min(1).max(30),
+      studentName: trimStr.min(2).max(120),
+      answers: z.array(
+        z.object({
+          questionId: objectId,
+          answerText: z.string().max(10000).optional().default(''),
+          selectedOptions: z.array(objectId).optional().default([]),
+        })
+      ).min(1, 'At least one answer is required'),
+    }),
+  }),
+
+  quizScoreOverride: z.object({
+    body: z.object({
+      answerId: z.string().min(1),
+      overrideMarks: z.number().min(0).max(1000),
+    }),
+  }),
 };
 
 // ---- Validation Middleware Factory ----

@@ -114,6 +114,16 @@ export default function ActivityDetailPage() {
       {/* Action buttons */}
       <div className="flex flex-wrap gap-3 mb-6">
         <Link to={`/grading/${activity._id}`} className="btn-primary">📝 Open Grading Grid</Link>
+        {activity.activityType === 'Quiz' && (
+          <>
+            <Link to={`/quiz/builder/${activity._id}`} className="btn-primary bg-indigo-600 hover:bg-indigo-700">
+              ❓ Quiz Builder
+            </Link>
+            <Link to={`/quiz/results/${activity._id}`} className="btn-secondary">
+              📊 Quiz Results
+            </Link>
+          </>
+        )}
         {activity.status === 'draft' && (
           <button onClick={handleSubmit} className="btn-secondary bg-green-600 text-white hover:bg-green-700">
             ✅ Submit Activity
