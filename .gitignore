@@ -28,6 +28,10 @@ mongo-data/
 # Backups
 backend/backups/
 
+# Setup scripts (contain API keys)
+setup.bat
+setup.sh
+
 .generated_files/
 build/
 dist/
