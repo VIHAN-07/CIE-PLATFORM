@@ -5,7 +5,7 @@
 // Faculty generates the link; students use it to attempt.
 
 const mongoose = require('mongoose');
-const crypto = require('crypto');
+const crypto = require('node:crypto');
 
 const quizAttemptTokenSchema = new mongoose.Schema(
   {
@@ -46,6 +46,10 @@ const quizAttemptTokenSchema = new mongoose.Schema(
     totalUses: {
       type: Number,
       default: 0,
+    },
+    activeAttemptRollNos: {
+      type: [String],
+      default: [],
     },
   },
   { timestamps: true }

@@ -26,6 +26,7 @@ export default function QuizAttemptPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [currentQuestion, setCurrentQuestion] = useState(0);
+  const [attemptStartedAt, setAttemptStartedAt] = useState(null);
 
   useEffect(() => { loadQuiz(); }, [token]);
 
@@ -45,6 +46,7 @@ export default function QuizAttemptPage() {
   const handleStartQuiz = (e) => {
     e.preventDefault();
     if (!rollNo.trim() || !studentName.trim()) return;
+    setAttemptStartedAt(new Date().toISOString());
     setStep('quiz');
   };
 
@@ -58,7 +60,6 @@ export default function QuizAttemptPage() {
   const toggleMCQOption = (questionId, optionId) => {
     setAnswers(prev => {
       const current = prev[questionId]?.selectedOptions || [];
-      const question = questions.find(q => q._id === questionId);
 
       // Single select behavior for MCQ
       let updated;
@@ -91,6 +92,7 @@ export default function QuizAttemptPage() {
       await publicApi.post(`/quiz/attempt/${token}/submit`, {
         rollNo: rollNo.trim(),
         studentName: studentName.trim(),
+        attemptStartedAt,
         answers: formattedAnswers,
       });
 

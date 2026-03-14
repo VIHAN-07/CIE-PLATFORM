@@ -7,6 +7,7 @@
 const router = require('express').Router();
 const auth = require('../middleware/auth');
 const { validate } = require('../middleware/validate');
+const { quizAttemptLimiter, quizSubmitLimiter } = require('../middleware/rateLimiter');
 const ctrl = require('../controllers/quizController');
 
 // ---- Faculty Routes (Authenticated) ----
@@ -35,9 +36,9 @@ router.post('/sync-cie/single/:submissionId', auth, ctrl.syncSingleToCIE);
 // ---- Public Routes (Student — No Auth) ----
 
 // Load quiz via token
-router.get('/attempt/:token', ctrl.loadQuiz);
+router.get('/attempt/:token', quizAttemptLimiter, ctrl.loadQuiz);
 
 // Submit quiz
-router.post('/attempt/:token/submit', validate('quizAttemptSubmit'), ctrl.submitQuiz);
+router.post('/attempt/:token/submit', quizSubmitLimiter, validate('quizAttemptSubmit'), ctrl.submitQuiz);
 
 module.exports = router;

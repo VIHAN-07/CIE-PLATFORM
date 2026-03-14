@@ -20,6 +20,9 @@ const {
   syncAllSubmissionsToCIE,
 } = require('../services/quizEvaluationEngine');
 
+const escapeRegExp = (value = '') => value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+const normalizeRollNo = (value = '') => value.trim().toUpperCase();
+
 // ==========================================
 // QUESTION MANAGEMENT (Faculty — Authenticated)
 // ==========================================
@@ -185,6 +188,10 @@ exports.generateLink = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'Access denied.' });
     }
 
+    if (activity.status === 'locked') {
+      return res.status(400).json({ success: false, message: 'Activity is locked. Cannot generate quiz links.' });
+    }
+
     // Check if quiz has questions
     const questionCount = await QuizQuestion.countDocuments({ activity: activityId });
     if (questionCount === 0) {
@@ -232,6 +239,13 @@ exports.generateLink = async (req, res, next) => {
 /** GET /api/quiz/tokens/:activityId — Get all tokens for an activity */
 exports.getTokens = async (req, res, next) => {
   try {
+    const activity = await Activity.findById(req.params.activityId);
+    if (!activity) return res.status(404).json({ success: false, message: 'Activity not found.' });
+
+    if (req.user.role === 'faculty' && activity.faculty.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Access denied.' });
+    }
+
     const tokens = await QuizAttemptToken.find({ activity: req.params.activityId })
       .populate('generatedBy', 'name email')
       .sort('-createdAt');
@@ -252,11 +266,28 @@ exports.getTokens = async (req, res, next) => {
 /** PATCH /api/quiz/tokens/:tokenId/deactivate — Deactivate a token */
 exports.deactivateToken = async (req, res, next) => {
   try {
-    const token = await QuizAttemptToken.findById(req.params.tokenId);
+    const token = await QuizAttemptToken.findById(req.params.tokenId)
+      .populate('activity', 'faculty name');
     if (!token) return res.status(404).json({ success: false, message: 'Token not found.' });
+
+    if (!token.activity) {
+      return res.status(404).json({ success: false, message: 'Activity not found for this token.' });
+    }
+
+    if (req.user.role === 'faculty' && token.activity.faculty.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Access denied.' });
+    }
 
     token.isActive = false;
     await token.save();
+
+    audit.log({
+      req,
+      action: 'QUIZ_LINK_DEACTIVATE',
+      entityType: 'QuizAttemptToken',
+      entityId: token._id,
+      description: `Quiz link deactivated for activity ${token.activity.name || token.activity._id}`,
+    });
 
     res.json({ success: true, message: 'Token deactivated.' });
   } catch (err) {
@@ -284,6 +315,10 @@ exports.loadQuiz = async (req, res, next) => {
       .populate('subject', 'name code');
     if (!activity) {
       return res.status(404).json({ success: false, message: 'Quiz activity not found.' });
+    }
+
+    if (activity.status === 'locked') {
+      return res.status(403).json({ success: false, message: 'This quiz is closed.' });
     }
 
     // Load questions WITHOUT correct answers (security: don't expose answers to students)
@@ -321,8 +356,12 @@ exports.loadQuiz = async (req, res, next) => {
 
 /** POST /api/quiz/attempt/:token/submit — Student submits quiz answers */
 exports.submitQuiz = async (req, res, next) => {
+  let lockAcquired = false;
+  let lockedTokenId = null;
+  const normalizedRollNo = normalizeRollNo(req.body.rollNo || '');
+
   try {
-    const { rollNo, studentName, answers } = req.body;
+    const { studentName, answers, attemptStartedAt } = req.body;
 
     const attemptToken = await QuizAttemptToken.findOne({ token: req.params.token });
     if (!attemptToken) {
@@ -333,26 +372,91 @@ exports.submitQuiz = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'This quiz link has expired or been deactivated.' });
     }
 
-    // Check for duplicate submission
-    if (!attemptToken.allowMultipleAttempts) {
-      const existing = await QuizSubmission.findOne({
-        activity: attemptToken.activity,
-        rollNo: { $regex: new RegExp(`^${rollNo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
-        token: attemptToken._id,
+    const activity = await Activity.findById(attemptToken.activity).select('status');
+    if (!activity) {
+      return res.status(404).json({ success: false, message: 'Quiz activity not found.' });
+    }
+
+    if (activity.status === 'locked') {
+      return res.status(403).json({ success: false, message: 'This quiz is closed.' });
+    }
+
+    const lockedToken = await QuizAttemptToken.findOneAndUpdate(
+      { _id: attemptToken._id, activeAttemptRollNos: { $ne: normalizedRollNo } },
+      { $addToSet: { activeAttemptRollNos: normalizedRollNo } },
+      { new: true }
+    );
+
+    if (!lockedToken) {
+      return res.status(409).json({
+        success: false,
+        message: 'A submission is already in progress for this roll number. Please wait and try again.',
       });
-      if (existing) {
-        return res.status(409).json({
-          success: false,
-          message: 'You have already submitted this quiz. Multiple attempts are not allowed.',
-        });
+    }
+
+    lockAcquired = true;
+    lockedTokenId = lockedToken._id;
+
+    const normalizedRollNoRegex = new RegExp(`^${escapeRegExp(normalizedRollNo)}$`, 'i');
+    const existingSubmissionCount = await QuizSubmission.countDocuments({
+      activity: lockedToken.activity,
+      rollNo: { $regex: normalizedRollNoRegex },
+      token: lockedToken._id,
+    });
+
+    if (!lockedToken.allowMultipleAttempts && existingSubmissionCount >= 1) {
+      return res.status(409).json({
+        success: false,
+        message: 'You have already submitted this quiz. Multiple attempts are not allowed.',
+      });
+    }
+
+    if (lockedToken.maxAttempts > 0 && existingSubmissionCount >= lockedToken.maxAttempts) {
+      return res.status(409).json({
+        success: false,
+        message: `Maximum attempts (${lockedToken.maxAttempts}) reached for this quiz.`,
+      });
+    }
+
+    const questions = await QuizQuestion.find({ activity: lockedToken.activity }).select('_id');
+    const validQuestionIds = new Set(questions.map((q) => q._id.toString()));
+
+    const invalidAnswer = answers.find((answer) => !validQuestionIds.has(answer.questionId));
+    if (invalidAnswer) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid answer payload: one or more question IDs do not belong to this quiz.',
+      });
+    }
+
+    const submittedQuestionIds = answers.map((answer) => answer.questionId);
+    if (new Set(submittedQuestionIds).size !== submittedQuestionIds.length) {
+      return res.status(400).json({
+        success: false,
+        message: 'Duplicate answers for the same question are not allowed.',
+      });
+    }
+
+    const submittedAt = new Date();
+    let normalizedAttemptStartedAt = null;
+    let submissionDurationSeconds = null;
+
+    if (attemptStartedAt) {
+      const parsedStartedAt = new Date(attemptStartedAt);
+      if (!Number.isNaN(parsedStartedAt.getTime()) && parsedStartedAt <= submittedAt) {
+        const durationSeconds = Math.round((submittedAt.getTime() - parsedStartedAt.getTime()) / 1000);
+        if (durationSeconds >= 0 && durationSeconds <= 24 * 60 * 60) {
+          normalizedAttemptStartedAt = parsedStartedAt;
+          submissionDurationSeconds = durationSeconds;
+        }
       }
     }
 
     // Create submission
     const submission = await QuizSubmission.create({
-      activity: attemptToken.activity,
-      token: attemptToken._id,
-      rollNo: rollNo.trim(),
+      activity: lockedToken.activity,
+      token: lockedToken._id,
+      rollNo: normalizedRollNo,
       studentName: studentName.trim(),
       answers: answers.map((a) => ({
         question: a.questionId,
@@ -360,20 +464,22 @@ exports.submitQuiz = async (req, res, next) => {
         selectedOptions: a.selectedOptions || [],
       })),
       ipAddress: req.ip || req.connection?.remoteAddress || '',
-      submittedAt: new Date(),
+      submittedAt,
+      attemptStartedAt: normalizedAttemptStartedAt,
+      submissionDurationSeconds,
     });
 
     // Increment token usage
-    attemptToken.totalUses += 1;
-    await attemptToken.save();
+    await QuizAttemptToken.updateOne({ _id: lockedToken._id }, { $inc: { totalUses: 1 } });
 
     // Auto-evaluate the submission
     const evaluated = await evaluateSubmission(submission._id);
 
     logger.info('Quiz submitted and evaluated', {
       submissionId: submission._id,
-      rollNo,
+      rollNo: normalizedRollNo,
       studentName,
+      submissionDurationSeconds: submissionDurationSeconds ?? undefined,
       score: `${evaluated.totalMarksObtained}/${evaluated.totalMarksPossible}`,
     });
 
@@ -385,6 +491,19 @@ exports.submitQuiz = async (req, res, next) => {
     });
   } catch (err) {
     next(err);
+  } finally {
+    if (lockAcquired && lockedTokenId) {
+      await QuizAttemptToken.updateOne(
+        { _id: lockedTokenId },
+        { $pull: { activeAttemptRollNos: normalizedRollNo } }
+      ).catch((unlockErr) => {
+        logger.warn('Failed to release quiz submission lock', {
+          tokenId: lockedTokenId,
+          rollNo: normalizedRollNo,
+          error: unlockErr.message,
+        });
+      });
+    }
   }
 };
 
@@ -402,9 +521,40 @@ exports.getSubmissions = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'Access denied.' });
     }
 
-    const submissions = await QuizSubmission.find({ activity: req.params.activityId })
+    const search = (req.query.search || '').trim();
+    const status = (req.query.status || '').trim().toLowerCase();
+    const sortBy = (req.query.sortBy || 'rollNo').trim();
+    const sortOrder = (req.query.sortOrder || 'asc').trim().toLowerCase() === 'desc' ? -1 : 1;
+
+    const allowedStatus = new Set(['submitted', 'evaluated', 'reviewed', 'in-progress']);
+    const allowedSortMap = {
+      rollNo: 'rollNo',
+      studentName: 'studentName',
+      percentageScore: 'percentageScore',
+      totalMarksObtained: 'totalMarksObtained',
+      status: 'status',
+      submittedAt: 'submittedAt',
+      cieSynced: 'cieSynced',
+    };
+
+    const query = { activity: req.params.activityId };
+    if (allowedStatus.has(status)) {
+      query.status = status;
+    }
+
+    if (search) {
+      const searchRegex = new RegExp(escapeRegExp(search), 'i');
+      query.$or = [
+        { rollNo: searchRegex },
+        { studentName: searchRegex },
+      ];
+    }
+
+    const sortField = allowedSortMap[sortBy] || 'rollNo';
+
+    const submissions = await QuizSubmission.find(query)
       .populate('student', 'rollNo name')
-      .sort('rollNo');
+      .sort({ [sortField]: sortOrder, submittedAt: -1 });
 
     // Get questions for column headers
     const questions = await QuizQuestion.find({ activity: req.params.activityId }).sort('order');
@@ -413,6 +563,12 @@ exports.getSubmissions = async (req, res, next) => {
       success: true,
       submissions,
       questions,
+      filters: {
+        search,
+        status: status && allowedStatus.has(status) ? status : 'all',
+        sortBy: sortField,
+        sortOrder: sortOrder === 1 ? 'asc' : 'desc',
+      },
       summary: {
         total: submissions.length,
         evaluated: submissions.filter((s) => s.status === 'evaluated' || s.status === 'reviewed').length,
@@ -436,6 +592,13 @@ exports.getSubmissionDetail = async (req, res, next) => {
       .populate('student', 'rollNo name');
     if (!submission) return res.status(404).json({ success: false, message: 'Submission not found.' });
 
+    const activity = await Activity.findById(submission.activity).select('faculty');
+    if (!activity) return res.status(404).json({ success: false, message: 'Activity not found.' });
+
+    if (req.user.role === 'faculty' && activity.faculty.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Access denied.' });
+    }
+
     const questions = await QuizQuestion.find({ activity: submission.activity }).sort('order');
 
     // Build detailed answer breakdown
@@ -445,6 +608,7 @@ exports.getSubmissionDetail = async (req, res, next) => {
     const breakdown = submission.answers.map((ans) => {
       const q = questionMap[ans.question.toString()];
       return {
+        answerId: ans._id,
         questionText: q?.questionText || 'Unknown',
         questionType: q?.questionType || 'unknown',
         maxMarks: ans.maxMarks,
@@ -474,6 +638,17 @@ exports.overrideScore = async (req, res, next) => {
 
     const submission = await QuizSubmission.findById(req.params.submissionId);
     if (!submission) return res.status(404).json({ success: false, message: 'Submission not found.' });
+
+    const activity = await Activity.findById(submission.activity).select('faculty status');
+    if (!activity) return res.status(404).json({ success: false, message: 'Activity not found.' });
+
+    if (req.user.role === 'faculty' && activity.faculty.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Access denied.' });
+    }
+
+    if (activity.status === 'locked') {
+      return res.status(400).json({ success: false, message: 'Activity is locked. Overrides are not allowed.' });
+    }
 
     const answer = submission.answers.id(answerId);
     if (!answer) return res.status(404).json({ success: false, message: 'Answer not found.' });
@@ -554,6 +729,13 @@ exports.syncSingleToCIE = async (req, res, next) => {
   try {
     const submission = await QuizSubmission.findById(req.params.submissionId);
     if (!submission) return res.status(404).json({ success: false, message: 'Submission not found.' });
+
+    const activity = await Activity.findById(submission.activity).select('faculty');
+    if (!activity) return res.status(404).json({ success: false, message: 'Activity not found.' });
+
+    if (req.user.role === 'faculty' && activity.faculty.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Access denied.' });
+    }
 
     const result = await syncSubmissionToCIE(submission._id, req.user._id);
 

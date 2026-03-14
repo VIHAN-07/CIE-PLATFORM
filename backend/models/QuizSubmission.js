@@ -112,6 +112,15 @@ const quizSubmissionSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
+    attemptStartedAt: {
+      type: Date,
+      default: null,
+    },
+    submissionDurationSeconds: {
+      type: Number,
+      default: null,
+      min: 0,
+    },
     evaluatedAt: {
       type: Date,
     },

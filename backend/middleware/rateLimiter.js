@@ -23,4 +23,29 @@ const aiLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-module.exports = { apiLimiter, aiLimiter };
+/** Public quiz read limiter (token + IP scoped) */
+const quizAttemptLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  keyGenerator: (req) => `${req.ip}:${req.params.token || 'unknown'}`,
+  message: { message: 'Too many quiz requests. Please wait a moment and try again.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+/** Public quiz submission limiter (stricter, token + IP scoped) */
+const quizSubmitLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  keyGenerator: (req) => `${req.ip}:${req.params.token || 'unknown'}:submit`,
+  message: { message: 'Too many submission attempts. Please wait and try again.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+module.exports = {
+  apiLimiter,
+  aiLimiter,
+  quizAttemptLimiter,
+  quizSubmitLimiter,
+};

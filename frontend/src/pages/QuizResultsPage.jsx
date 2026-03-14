@@ -21,13 +21,36 @@ export default function QuizResultsPage() {
   const [selectedSubmission, setSelectedSubmission] = useState(null);
   const [breakdown, setBreakdown] = useState([]);
   const [showDetail, setShowDetail] = useState(false);
+  const [searchInput, setSearchInput] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('rollNo');
+  const [sortOrder, setSortOrder] = useState('asc');
 
-  useEffect(() => { loadData(); }, [activityId]);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchTerm(searchInput.trim());
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  useEffect(() => {
+    loadData();
+  }, [activityId, searchTerm, statusFilter, sortBy, sortOrder]);
 
   const loadData = async () => {
+    setLoading(true);
     try {
       const [subRes, actRes] = await Promise.all([
-        api.get(`/quiz/submissions/${activityId}`),
+        api.get(`/quiz/submissions/${activityId}`, {
+          params: {
+            search: searchTerm || undefined,
+            status: statusFilter === 'all' ? undefined : statusFilter,
+            sortBy,
+            sortOrder,
+          },
+        }),
         api.get(`/activities/${activityId}`),
       ]);
       setSubmissions(subRes.data.submissions);
@@ -35,6 +58,7 @@ export default function QuizResultsPage() {
       setSummary(subRes.data.summary);
       setActivity(actRes.data.activity);
     } catch (err) {
+      console.error('Failed to load quiz results', err);
       toast.error('Failed to load results');
     } finally {
       setLoading(false);
@@ -48,6 +72,7 @@ export default function QuizResultsPage() {
       setBreakdown(data.breakdown);
       setShowDetail(true);
     } catch (err) {
+      console.error('Failed to load submission details', err);
       toast.error('Failed to load submission details');
     }
   };
@@ -55,8 +80,8 @@ export default function QuizResultsPage() {
   const handleOverrideScore = async (answerId, maxMarks) => {
     const input = prompt(`Enter new marks (0 to ${maxMarks}):`);
     if (input === null) return;
-    const marks = parseFloat(input);
-    if (isNaN(marks) || marks < 0 || marks > maxMarks) {
+    const marks = Number.parseFloat(input);
+    if (Number.isNaN(marks) || marks < 0 || marks > maxMarks) {
       return toast.error(`Invalid marks. Must be between 0 and ${maxMarks}.`);
     }
 
@@ -93,7 +118,14 @@ export default function QuizResultsPage() {
     try {
       const { data } = await api.post(`/quiz/sync-cie/single/${submissionId}`);
       if (data.synced) {
-        toast.success(`Synced to CIE (Rubric score: ${data.rubricScore}/5)`);
+        const rubricBreakdown = Array.isArray(data.rubricScores)
+          ? data.rubricScores.map((item) => `${item.rubricName}: ${item.rubricScore}/5`).join(' | ')
+          : '';
+        toast.success(
+          rubricBreakdown
+            ? `Synced to CIE • ${rubricBreakdown}`
+            : `Synced to CIE (Rubric score: ${data.rubricScore}/5)`
+        );
       } else {
         toast.error(data.reason || 'Sync failed');
       }
@@ -101,6 +133,82 @@ export default function QuizResultsPage() {
     } catch (err) {
       toast.error(err.response?.data?.message || 'Sync failed');
     }
+  };
+
+  const handleResetFilters = () => {
+    setSearchInput('');
+    setSearchTerm('');
+    setStatusFilter('all');
+    setSortBy('rollNo');
+    setSortOrder('asc');
+  };
+
+  const handleExportCsv = () => {
+    if (submissions.length === 0) {
+      toast.error('No submissions to export');
+      return;
+    }
+
+    const headers = [
+      'Roll No',
+      'Name',
+      ...questions.map((q, idx) => `Q${idx + 1} (${q.marks}m)`),
+      'Total Obtained',
+      'Total Possible',
+      'Percentage',
+      'Status',
+      'CIE Synced',
+      'Submitted At',
+    ];
+
+    const rows = submissions.map((sub) => {
+      const answerMap = {};
+      sub.answers.forEach((a) => {
+        answerMap[a.question?.toString() || a.question] = a;
+      });
+
+      return [
+        sub.rollNo,
+        sub.studentName,
+        ...questions.map((q) => {
+          const ans = answerMap[q._id];
+          const marks = ans?.facultyOverride !== null && ans?.facultyOverride !== undefined
+            ? ans.facultyOverride
+            : ans?.awardedMarks || 0;
+          const maxM = ans?.maxMarks || q.marks;
+          return `${marks}/${maxM}`;
+        }),
+        sub.totalMarksObtained,
+        sub.totalMarksPossible,
+        `${sub.percentageScore}%`,
+        sub.status,
+        sub.cieSynced ? 'Yes' : 'No',
+        new Date(sub.submittedAt).toLocaleString(),
+      ];
+    });
+
+    const escapeCsv = (value) => {
+      const cell = value === null || value === undefined ? '' : String(value);
+      if (/[,"\n]/.test(cell)) return `"${cell.replaceAll('"', '""')}"`;
+      return cell;
+    };
+
+    const csv = [headers, ...rows]
+      .map((row) => row.map(escapeCsv).join(','))
+      .join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const safeActivityName = (activity?.name || 'quiz').replaceAll(/[^a-z0-9]/gi, '_');
+    const timestamp = new Date().toISOString().slice(0, 19).replaceAll(/[:T]/g, '-');
+    link.href = url;
+    link.download = `Quiz_Submissions_${safeActivityName}_${timestamp}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    toast.success('CSV exported successfully');
   };
 
   if (loading) return <div className="text-center py-12"><Spinner /></div>;
@@ -154,8 +262,61 @@ export default function QuizResultsPage() {
           <p className="text-sm text-gray-500 flex items-center">
             Syncs evaluated quiz scores into the CIE grading grid automatically.
           </p>
+          <button
+            onClick={handleExportCsv}
+            className="btn-secondary"
+          >
+            ⬇ Export CSV
+          </button>
         </div>
       )}
+
+      {/* Filters and sorting */}
+      <div className="bg-white rounded-xl border p-4 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+          <input
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            className="input-field"
+            placeholder="Search roll no or name"
+          />
+
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="input-field"
+          >
+            <option value="all">All statuses</option>
+            <option value="submitted">Submitted</option>
+            <option value="evaluated">Evaluated</option>
+            <option value="reviewed">Reviewed</option>
+          </select>
+
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            className="input-field"
+          >
+            <option value="rollNo">Sort: Roll No</option>
+            <option value="studentName">Sort: Name</option>
+            <option value="percentageScore">Sort: Percentage</option>
+            <option value="submittedAt">Sort: Submission Time</option>
+            <option value="status">Sort: Status</option>
+            <option value="cieSynced">Sort: CIE Sync</option>
+          </select>
+
+          <button
+            onClick={() => setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
+            className="btn-secondary"
+          >
+            {sortOrder === 'asc' ? '↑ Ascending' : '↓ Descending'}
+          </button>
+
+          <button onClick={handleResetFilters} className="btn-secondary">
+            Reset
+          </button>
+        </div>
+      </div>
 
       {/* Submissions Table */}
       <div className="bg-white rounded-xl border overflow-hidden">
@@ -166,6 +327,7 @@ export default function QuizResultsPage() {
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">#</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Roll No</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Name</th>
+                <th className="text-center px-4 py-3 font-semibold text-gray-600">Status</th>
                 {questions.map((q, idx) => (
                   <th key={q._id} className="text-center px-3 py-3 font-semibold text-gray-600 min-w-[80px]">
                     Q{idx + 1}
@@ -189,6 +351,16 @@ export default function QuizResultsPage() {
                     <td className="px-4 py-3 text-gray-500">{idx + 1}</td>
                     <td className="px-4 py-3 font-medium">{sub.rollNo}</td>
                     <td className="px-4 py-3">{sub.studentName}</td>
+                    <td className="text-center px-4 py-3">
+                      <span className={`text-xs px-2 py-1 rounded-full ${
+                        sub.status === 'reviewed' ? 'bg-blue-100 text-blue-700' :
+                        sub.status === 'evaluated' ? 'bg-green-100 text-green-700' :
+                        sub.status === 'submitted' ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-gray-100 text-gray-700'
+                      }`}>
+                        {sub.status === 'in-progress' ? 'In Progress' : sub.status.charAt(0).toUpperCase() + sub.status.slice(1)}
+                      </span>
+                    </td>
                     {questions.map((q) => {
                       const ans = answerMap[q._id];
                       const marks = ans?.facultyOverride !== null && ans?.facultyOverride !== undefined
@@ -226,13 +398,15 @@ export default function QuizResultsPage() {
                     <td className="text-center px-4 py-3">
                       {sub.cieSynced ? (
                         <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">✓ Synced</span>
-                      ) : (
+                      ) : ['evaluated', 'reviewed'].includes(sub.status) ? (
                         <button
                           onClick={() => handleSyncSingle(sub._id)}
                           className="text-xs text-primary-600 hover:underline"
                         >
                           Sync
                         </button>
+                      ) : (
+                        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">Pending eval</span>
                       )}
                     </td>
                     <td className="text-center px-4 py-3">
@@ -308,7 +482,7 @@ export default function QuizResultsPage() {
                         {item.awardedMarks}/{item.maxMarks}
                       </span>
                       <button
-                        onClick={() => handleOverrideScore(breakdown[idx]?._id || `answer-${idx}`, item.maxMarks)}
+                        onClick={() => handleOverrideScore(item.answerId, item.maxMarks)}
                         className="text-xs text-orange-600 hover:underline"
                         title="Override score"
                       >

@@ -282,6 +282,7 @@ const schemas = {
     body: z.object({
       rollNo: trimStr.min(1).max(30),
       studentName: trimStr.min(2).max(120),
+      attemptStartedAt: z.union([z.string().datetime(), z.date()]).optional(),
       answers: z.array(
         z.object({
           questionId: objectId,

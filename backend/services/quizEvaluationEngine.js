@@ -16,6 +16,8 @@ const Subject = require('../models/Subject');
 const { recomputeSubjectResults } = require('./scoringEngine');
 const logger = require('./logger');
 
+const escapeRegExp = (value = '') => value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+
 /**
  * Evaluate a single answer against its question definition.
  * @param {Object} question - QuizQuestion document
@@ -209,6 +211,128 @@ function percentageToRubricScore(percentage) {
   return 1;
 }
 
+const RUBRIC_METRIC_KEYWORDS = {
+  accuracy: ['accuracy', 'correct', 'correctness', 'precision', 'answer quality'],
+  conceptual: ['concept', 'clarity', 'understanding', 'logic', 'depth', 'explanation'],
+  time: ['time', 'punctual', 'speed', 'deadline', 'management'],
+};
+
+function clampPercentage(value) {
+  return Math.max(0, Math.min(100, Math.round(value * 100) / 100));
+}
+
+function safeRatio(obtained, possible, fallback = 0) {
+  if (!possible || possible <= 0) return fallback;
+  const ratio = obtained / possible;
+  if (Number.isNaN(ratio) || !Number.isFinite(ratio)) return fallback;
+  return Math.max(0, Math.min(1, ratio));
+}
+
+function getEffectiveMarks(answer, maxMarks) {
+  const rawMarks = answer.facultyOverride !== null && answer.facultyOverride !== undefined
+    ? Number(answer.facultyOverride)
+    : Number(answer.awardedMarks || 0);
+  if (!Number.isFinite(rawMarks)) return 0;
+  return Math.max(0, Math.min(maxMarks, rawMarks));
+}
+
+function resolveRubricMetricType(rubricName = '') {
+  const normalizedName = rubricName.toLowerCase();
+
+  if (RUBRIC_METRIC_KEYWORDS.accuracy.some((keyword) => normalizedName.includes(keyword))) {
+    return 'accuracy';
+  }
+
+  if (RUBRIC_METRIC_KEYWORDS.conceptual.some((keyword) => normalizedName.includes(keyword))) {
+    return 'conceptual';
+  }
+
+  if (RUBRIC_METRIC_KEYWORDS.time.some((keyword) => normalizedName.includes(keyword))) {
+    return 'time';
+  }
+
+  return 'overall';
+}
+
+function computeExpectedDurationSeconds(questions = []) {
+  if (!questions.length) return 0;
+
+  return questions.reduce((total, question) => {
+    switch (question.questionType) {
+      case 'mcq':
+        return total + 60;
+      case 'short':
+        return total + 120;
+      case 'descriptive':
+        return total + 300;
+      default:
+        return total + 120;
+    }
+  }, 0);
+}
+
+function computeRubricMetricRatios(submission, questions, questionMap) {
+  let overallObtained = 0;
+  let overallPossible = 0;
+
+  let accuracyObtained = 0;
+  let accuracyPossible = 0;
+
+  let conceptualObtained = 0;
+  let conceptualPossible = 0;
+
+  submission.answers.forEach((answer) => {
+    const question = questionMap.get(answer.question.toString());
+    const maxMarks = Number(answer.maxMarks || question?.marks || 0);
+    if (!Number.isFinite(maxMarks) || maxMarks <= 0) return;
+
+    const obtainedMarks = getEffectiveMarks(answer, maxMarks);
+
+    overallObtained += obtainedMarks;
+    overallPossible += maxMarks;
+
+    if (question?.questionType === 'mcq' || question?.questionType === 'short') {
+      accuracyObtained += obtainedMarks;
+      accuracyPossible += maxMarks;
+    }
+
+    if (question?.questionType === 'short' || question?.questionType === 'descriptive') {
+      conceptualObtained += obtainedMarks;
+      conceptualPossible += maxMarks;
+    }
+  });
+
+  const overallRatio = safeRatio(overallObtained, overallPossible, 0);
+  const accuracyRatio = safeRatio(accuracyObtained, accuracyPossible, overallRatio);
+  const conceptualRatio = safeRatio(conceptualObtained, conceptualPossible, overallRatio);
+
+  let timeRatio = overallRatio;
+  const durationSeconds = Number(submission.submissionDurationSeconds);
+  if (Number.isFinite(durationSeconds) && durationSeconds > 0) {
+    const expectedSeconds = computeExpectedDurationSeconds(questions);
+    if (expectedSeconds > 0) {
+      if (durationSeconds <= expectedSeconds * 0.9) {
+        timeRatio = 1;
+      } else if (durationSeconds <= expectedSeconds * 1.1) {
+        timeRatio = 0.8;
+      } else if (durationSeconds <= expectedSeconds * 1.35) {
+        timeRatio = 0.6;
+      } else if (durationSeconds <= expectedSeconds * 1.7) {
+        timeRatio = 0.4;
+      } else {
+        timeRatio = 0.2;
+      }
+    }
+  }
+
+  return {
+    overall: overallRatio,
+    accuracy: accuracyRatio,
+    conceptual: conceptualRatio,
+    time: timeRatio,
+  };
+}
+
 /**
  * Sync quiz submission scores to the CIE Score model.
  * Maps quiz percentage to rubric scores for each ActivityRubric,
@@ -233,7 +357,7 @@ async function syncSubmissionToCIE(submissionId, facultyId) {
   if (!subject) throw new Error('Subject not found');
 
   const student = await Student.findOne({
-    rollNo: { $regex: new RegExp(`^${submission.rollNo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+    rollNo: { $regex: new RegExp(`^${escapeRegExp(submission.rollNo)}$`, 'i') },
     class: subject.class,
     academicYear: subject.academicYear,
   });
@@ -256,20 +380,35 @@ async function syncSubmissionToCIE(submissionId, facultyId) {
     return { synced: false, reason: 'No rubrics defined for this activity' };
   }
 
-  // Calculate rubric score from quiz percentage
-  const rubricScore = percentageToRubricScore(submission.percentageScore);
+  const questions = await QuizQuestion.find({ activity: submission.activity }).select('questionType marks');
+  const questionMap = new Map(questions.map((question) => [question._id.toString(), question]));
+  const metricRatios = computeRubricMetricRatios(submission, questions, questionMap);
 
-  // Create Score records for each rubric
-  const ops = rubrics.map((rubric) => ({
+  const rubricScores = rubrics.map((rubric) => {
+    const metricType = resolveRubricMetricType(rubric.name);
+    const metricRatio = metricRatios[metricType] ?? metricRatios.overall;
+    const metricPercentage = clampPercentage(metricRatio * 100);
+    const rubricScore = percentageToRubricScore(metricPercentage);
+
+    return {
+      rubricId: rubric._id,
+      rubricName: rubric.name,
+      metricType,
+      metricPercentage,
+      rubricScore,
+    };
+  });
+
+  const ops = rubricScores.map((item) => ({
     updateOne: {
       filter: {
         activity: submission.activity,
         student: student._id,
-        rubric: rubric._id,
+        rubric: item.rubricId,
       },
       update: {
         $set: {
-          score: rubricScore,
+          score: item.rubricScore,
           gradedBy: facultyId,
         },
       },
@@ -286,18 +425,26 @@ async function syncSubmissionToCIE(submissionId, facultyId) {
   // Recompute subject results
   await recomputeSubjectResults(subject._id, [student._id]);
 
+  const overallRubricScore = percentageToRubricScore(submission.percentageScore);
+
   logger.info('Quiz submission synced to CIE', {
     submissionId: submission._id,
     studentId: student._id,
-    rubricScore,
+    rubricScore: overallRubricScore,
     rubricCount: rubrics.length,
+    rubricScores: rubricScores.map((item) => ({
+      rubricName: item.rubricName,
+      score: item.rubricScore,
+      metricType: item.metricType,
+    })),
   });
 
   return {
     synced: true,
     studentId: student._id,
     rubricCount: rubrics.length,
-    rubricScore,
+    rubricScore: overallRubricScore,
+    rubricScores,
     percentageScore: submission.percentageScore,
   };
 }
