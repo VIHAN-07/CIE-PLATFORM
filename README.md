@@ -16,6 +16,16 @@ A production-ready MERN stack web application for managing **Continuous Internal
 - **Conduction Guidelines** — Built-in faculty guidelines for each activity type (PPT, Viva, GD, Lab, etc.)
 - **Docker Deployment** — Full Docker Compose setup with MongoDB, Node.js Backend, and Nginx-served React Frontend
 
+## 🌐 Production Hosting
+
+For VPS/cloud deployment using the `testing` branch, see **`HOSTING.md`**.
+
+It includes:
+- Production compose usage (`docker-compose.prod.yml`)
+- Required environment hardening
+- Health checks and first-time seeding
+- HTTPS guidance and update workflow
+
 ---
 
 ## 🛠️ Quick Start (Docker — Recommended)
