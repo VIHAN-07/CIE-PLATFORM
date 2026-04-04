@@ -20,12 +20,20 @@ const mongoSanitize = require('./middleware/sanitize');
 const { apiLimiter } = require('./middleware/rateLimiter');
 const logger = require('./services/logger');
 const { validateConfig } = require('./utils/configValidator');
+const { syncAdminUser } = require('./utils/syncAdminUser');
 
 // Validate config before anything else
 validateConfig();
 
 // Connect to MongoDB
 connectDB().then(async () => {
+  // Ensure admin credentials from environment are always usable.
+  try {
+    await syncAdminUser();
+  } catch (err) {
+    logger.warn('Admin sync skipped', { error: err.message });
+  }
+
   // Ensure indexes after connection is established
   try {
     const { ensureIndexes } = require('./config/indexes');
