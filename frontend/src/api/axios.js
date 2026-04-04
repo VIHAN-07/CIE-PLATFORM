@@ -27,10 +27,21 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err.response?.status === 401) {
+    const status = err.response?.status;
+    const requestUrl = err.config?.url || '';
+    const isAuthRequest = /\/auth\/(login|refresh)$/.test(requestUrl);
+
+    if (status === 401 && !isAuthRequest) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      window.location.href = '/login';
+
+      const loginPath = window.location.pathname.startsWith('/frontend')
+        ? '/frontend/login'
+        : '/login';
+
+      if (window.location.pathname !== loginPath) {
+        window.location.href = loginPath;
+      }
     }
     return Promise.reject(err);
   }
