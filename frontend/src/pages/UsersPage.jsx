@@ -12,6 +12,14 @@ export default function UsersPage() {
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'faculty', department: '' });
 
+  const validatePassword = (value) => {
+    if (value.length < 8) return 'Password must be at least 8 characters';
+    if (!/[a-z]/.test(value)) return 'Password must contain a lowercase letter';
+    if (!/[A-Z]/.test(value)) return 'Password must contain an uppercase letter';
+    if (!/\d/.test(value)) return 'Password must contain a digit';
+    return '';
+  };
+
   useEffect(() => { load(); }, []);
 
   const load = async () => {
@@ -21,6 +29,13 @@ export default function UsersPage() {
 
   const handleRegister = async (e) => {
     e.preventDefault();
+
+    const passwordError = validatePassword(form.password || '');
+    if (passwordError) {
+      toast.error(passwordError);
+      return;
+    }
+
     try {
       await api.post('/auth/register', form);
       toast.success('User registered!');
@@ -28,7 +43,12 @@ export default function UsersPage() {
       setForm({ name: '', email: '', password: '', role: 'faculty', department: '' });
       load();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Error');
+      const apiErrors = err.response?.data?.errors;
+      if (Array.isArray(apiErrors) && apiErrors.length) {
+        toast.error(apiErrors[0].replace(/^body\./, ''));
+      } else {
+        toast.error(err.response?.data?.message || 'Error');
+      }
     }
   };
 
@@ -100,7 +120,17 @@ export default function UsersPage() {
           </div>
           <div>
             <label className="label">Password</label>
-            <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required minLength={6} className="input" />
+            <input
+              type="password"
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+              required
+              minLength={8}
+              className="input"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Must be at least 8 characters and include uppercase, lowercase, and a digit.
+            </p>
           </div>
           <div>
             <label className="label">Role</label>
