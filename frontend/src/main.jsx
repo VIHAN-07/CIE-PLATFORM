@@ -6,9 +6,12 @@ import App from './App';
 import { AuthProvider } from './context/AuthContext';
 import './index.css';
 
+// Support both root deployments (/) and prefixed deployments (/frontend) on Vercel.
+const routerBase = window.location.pathname.startsWith('/frontend') ? '/frontend' : '/';
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <BrowserRouter>
+    <BrowserRouter basename={routerBase}>
       <AuthProvider>
         <Toaster position="top-right" toastOptions={{ duration: 3000 }} />
         <App />
