@@ -16,6 +16,7 @@ import ActivityDetailPage from './pages/ActivityDetailPage';
 import GradingPage from './pages/GradingPage';
 import ResultsPage from './pages/ResultsPage';
 import AIToolsPage from './pages/AIToolsPage';
+import LearningCenterPage from './pages/LearningCenterPage';
 import UsersPage from './pages/UsersPage';
 import TemplatesPage from './pages/TemplatesPage';
 import QuizBuilderPage from './pages/QuizBuilderPage';
@@ -53,6 +54,7 @@ export default function App() {
         <Route path="grading/:activityId" element={<GradingPage />} />
         <Route path="results/:subjectId" element={<ResultsPage />} />
         <Route path="ai-tools" element={<AIToolsPage />} />
+        <Route path="learning" element={<LearningCenterPage />} />
         <Route path="users" element={<ProtectedRoute adminOnly><UsersPage /></ProtectedRoute>} />
         <Route path="templates" element={<ProtectedRoute adminOnly><TemplatesPage /></ProtectedRoute>} />
         {/* Quiz module routes (faculty) */}

@@ -83,6 +83,11 @@ export default function MainLayout() {
           <NavLink to="/ai-tools" className={navItemClass}>
             <HiOutlineSparkles className="w-5 h-5" /> AI Tools
           </NavLink>
+
+          <p className="px-4 pt-4 pb-1 text-xs text-gray-500 uppercase tracking-wider">Learning</p>
+          <NavLink to="/learning" className={navItemClass}>
+            <HiOutlineBookOpen className="w-5 h-5" /> Learning Center
+          </NavLink>
         </nav>
 
         {/* User info */}

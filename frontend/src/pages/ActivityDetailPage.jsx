@@ -16,6 +16,7 @@ export default function ActivityDetailPage() {
   const navigate = useNavigate();
   const [activity, setActivity] = useState(null);
   const [rubrics, setRubrics] = useState([]);
+  const [learningGuide, setLearningGuide] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => { load(); }, [id]);
@@ -25,6 +26,14 @@ export default function ActivityDetailPage() {
       const { data } = await api.get(`/activities/${id}`);
       setActivity(data.activity);
       setRubrics(data.rubrics);
+
+      try {
+        const encodedType = encodeURIComponent(data.activity.activityType);
+        const guideRes = await api.get(`/learning/guides/${encodedType}`);
+        setLearningGuide(guideRes.data?.guide?.guide || guideRes.data?.guide || null);
+      } catch {
+        setLearningGuide(null);
+      }
     } catch (err) {
       toast.error('Activity not found');
       navigate('/activities');
@@ -144,7 +153,7 @@ export default function ActivityDetailPage() {
 
       {/* Conduction Guidelines */}
       <div className="mb-6">
-        <ConductionGuidelines activityType={activity.activityType} collapsible />
+        <ConductionGuidelines activityType={activity.activityType} collapsible guideData={learningGuide} />
       </div>
 
       {/* Custom Guidelines */}

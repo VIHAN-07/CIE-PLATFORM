@@ -151,6 +151,19 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
+
+        {/* Learning Center */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 lg:col-span-2">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Learning Center</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                Activity-wise conduction guides with timing and rubric mapping for faculty onboarding.
+              </p>
+            </div>
+            <Link to="/learning" className="btn-primary">Open Learning Center</Link>
+          </div>
+        </div>
       </div>
     </div>
   );

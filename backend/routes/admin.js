@@ -19,7 +19,7 @@ router.get('/faculty', ctrl.getFaculty);
 // Activity templates
 router.get('/templates', ctrl.getTemplates);
 router.post('/templates', validate('templateCreate'), ctrl.createTemplate);
-router.put('/templates/:id', ctrl.updateTemplate);
+router.put('/templates/:id', validate('templateUpdate'), ctrl.updateTemplate);
 router.delete('/templates/:id', ctrl.deleteTemplate);
 
 // Dashboard

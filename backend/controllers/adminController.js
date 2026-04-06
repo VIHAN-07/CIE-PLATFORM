@@ -92,7 +92,7 @@ exports.getFaculty = async (req, res, next) => {
 /** GET /api/admin/templates */
 exports.getTemplates = async (req, res, next) => {
   try {
-    const templates = await ActivityTemplate.find().sort('activityType');
+    const templates = await ActivityTemplate.find().sort({ guidePriority: 1, activityType: 1 });
     res.json(templates);
   } catch (err) {
     next(err);
@@ -102,12 +102,27 @@ exports.getTemplates = async (req, res, next) => {
 /** POST /api/admin/templates */
 exports.createTemplate = async (req, res, next) => {
   try {
-    const { activityType, description, defaultRubrics, guidelines } = req.body;
+    const {
+      activityType,
+      description,
+      defaultRubrics,
+      guidelines,
+      learningGuide,
+      isGuidePublished,
+      guidePriority,
+    } = req.body;
+
+    const now = new Date();
     const template = await ActivityTemplate.create({
       activityType,
       description,
       defaultRubrics,
       guidelines,
+      learningGuide,
+      isGuidePublished,
+      guidePriority,
+      guideLastUpdatedBy: req.user._id,
+      guideLastUpdatedAt: now,
       createdBy: req.user._id,
     });
 
@@ -128,11 +143,33 @@ exports.createTemplate = async (req, res, next) => {
 /** PUT /api/admin/templates/:id */
 exports.updateTemplate = async (req, res, next) => {
   try {
-    const template = await ActivityTemplate.findByIdAndUpdate(req.params.id, req.body, {
+    const previous = await ActivityTemplate.findById(req.params.id).lean();
+    if (!previous) return res.status(404).json({ success: false, message: 'Template not found.' });
+
+    const updatePayload = { ...req.body };
+    const guideTouched = ['learningGuide', 'isGuidePublished', 'guidePriority', 'guidelines']
+      .some((k) => Object.prototype.hasOwnProperty.call(req.body, k));
+
+    if (guideTouched) {
+      updatePayload.guideLastUpdatedBy = req.user._id;
+      updatePayload.guideLastUpdatedAt = new Date();
+    }
+
+    const template = await ActivityTemplate.findByIdAndUpdate(req.params.id, updatePayload, {
       new: true,
       runValidators: true,
     });
-    if (!template) return res.status(404).json({ success: false, message: 'Template not found.' });
+
+    audit.log({
+      req,
+      action: 'TEMPLATE_UPDATE',
+      entityType: 'ActivityTemplate',
+      entityId: template._id,
+      description: `Template updated: ${template.activityType}`,
+      previousValue: previous,
+      newValue: template.toObject(),
+    });
+
     res.json(template);
   } catch (err) {
     next(err);

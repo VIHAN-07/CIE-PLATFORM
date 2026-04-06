@@ -322,10 +322,112 @@ const ACTIVITY_GUIDELINES = {
 
 export { ACTIVITY_GUIDELINES };
 
-/** Renders hardcoded faculty conduction guidelines for a given activity type */
-export default function ConductionGuidelines({ activityType, collapsible = false }) {
+function asList(items) {
+  if (!Array.isArray(items)) return [];
+  return items.filter(Boolean).map((item) => `${item}`.trim()).filter(Boolean);
+}
+
+function buildStructuredSections(guide) {
+  const sections = [];
+
+  const preparationChecklist = asList(guide?.preparationChecklist);
+  if (preparationChecklist.length) {
+    sections.push({
+      heading: 'Pre-Activity Preparation',
+      items: preparationChecklist,
+    });
+  }
+
+  const timingBreakdown = Array.isArray(guide?.timingBreakdown)
+    ? guide.timingBreakdown
+      .filter((item) => item?.phase && Number(item?.durationMinutes) > 0)
+      .map((item) => `${item.phase}: ${item.durationMinutes} min`)
+    : [];
+  if (timingBreakdown.length) {
+    sections.push({
+      heading: 'Recommended Time Split',
+      items: timingBreakdown,
+    });
+  }
+
+  const conductSteps = Array.isArray(guide?.conductSteps)
+    ? guide.conductSteps
+      .filter((item) => item?.title)
+      .map((item) => {
+        const details = asList(item.details);
+        const duration = Number(item.durationMinutes) > 0 ? ` (${item.durationMinutes} min)` : '';
+        return details.length
+          ? `${item.title}${duration}: ${details.join(' | ')}`
+          : `${item.title}${duration}`;
+      })
+    : [];
+  if (conductSteps.length) {
+    sections.push({
+      heading: 'Step-by-Step Conduct Flow',
+      items: conductSteps,
+    });
+  }
+
+  const rubricMappingTips = asList(guide?.rubricMappingTips);
+  if (rubricMappingTips.length) {
+    sections.push({
+      heading: 'Rubric Mapping Tips',
+      items: rubricMappingTips,
+    });
+  }
+
+  const commonMistakes = asList(guide?.commonMistakes);
+  if (commonMistakes.length) {
+    sections.push({
+      heading: 'Common Mistakes To Avoid',
+      items: commonMistakes,
+    });
+  }
+
+  const bestPractices = asList(guide?.bestPractices);
+  if (bestPractices.length) {
+    sections.push({
+      heading: 'Best Practices',
+      items: bestPractices,
+    });
+  }
+
+  return sections;
+}
+
+function hasStructuredGuide(guide) {
+  if (!guide) return false;
+  return Boolean(
+    guide.objective ||
+    asList(guide.outcomes).length ||
+    asList(guide.preparationChecklist).length ||
+    asList(guide.rubricMappingTips).length ||
+    asList(guide.commonMistakes).length ||
+    asList(guide.bestPractices).length ||
+    (Array.isArray(guide.timingBreakdown) && guide.timingBreakdown.length) ||
+    (Array.isArray(guide.conductSteps) && guide.conductSteps.length)
+  );
+}
+
+/** Renders conduction guidelines for a given activity type */
+export default function ConductionGuidelines({ activityType, collapsible = false, guideData = null }) {
   const [expanded, setExpanded] = useState(!collapsible);
-  const data = ACTIVITY_GUIDELINES[activityType];
+
+  const fallback = ACTIVITY_GUIDELINES[activityType];
+  const structuredGuide = guideData?.guide || guideData;
+  const useStructured = hasStructuredGuide(structuredGuide);
+
+  const data = useStructured
+    ? {
+      icon: fallback?.icon || '📘',
+      title: fallback?.title || `${activityType} Activity`,
+      objective: structuredGuide.objective || fallback?.objective || '',
+      outcomes: asList(structuredGuide.outcomes),
+      sections: buildStructuredSections(structuredGuide),
+      totalDurationMinutes: Number(structuredGuide.totalDurationMinutes) || 0,
+    }
+    : fallback;
+
   if (!data) return null;
 
   return (
@@ -340,14 +442,25 @@ export default function ConductionGuidelines({ activityType, collapsible = false
             <span className="text-2xl">{data.icon}</span>
             <div className="text-left">
               <h3 className="text-white font-bold text-lg">{data.title} — Conduction Guidelines</h3>
-              <p className="text-primary-100 text-sm mt-0.5">For faculty: how to plan, conduct, and evaluate this activity</p>
+              <p className="text-primary-100 text-sm mt-0.5">
+                {useStructured
+                  ? 'Admin-curated guide for conducting this activity effectively'
+                  : 'For faculty: how to plan, conduct, and evaluate this activity'}
+              </p>
             </div>
           </div>
-          {collapsible && (
-            <span className="text-white">
-              {expanded ? <HiChevronUp className="w-5 h-5" /> : <HiChevronDown className="w-5 h-5" />}
-            </span>
-          )}
+          <div className="flex items-center gap-3">
+            {data.totalDurationMinutes > 0 && (
+              <span className="text-xs bg-white/20 text-white px-2 py-1 rounded-full font-medium">
+                ~ {data.totalDurationMinutes} min
+              </span>
+            )}
+            {collapsible && (
+              <span className="text-white">
+                {expanded ? <HiChevronUp className="w-5 h-5" /> : <HiChevronDown className="w-5 h-5" />}
+              </span>
+            )}
+          </div>
         </div>
       </button>
 
@@ -357,6 +470,19 @@ export default function ConductionGuidelines({ activityType, collapsible = false
           <div className="px-6 py-4 bg-blue-50 border-b border-blue-100">
             <p className="text-sm font-semibold text-blue-900 mb-1">🎯 Objective</p>
             <p className="text-sm text-blue-800 leading-relaxed">{data.objective}</p>
+            {Array.isArray(data.outcomes) && data.outcomes.length > 0 && (
+              <div className="mt-3">
+                <p className="text-xs font-semibold text-blue-900 mb-1.5 uppercase tracking-wide">Outcomes</p>
+                <ul className="space-y-1">
+                  {data.outcomes.map((outcome, idx) => (
+                    <li key={idx} className="flex items-start gap-2 text-sm text-blue-800">
+                      <span className="mt-1 text-blue-500">•</span>
+                      <span>{outcome}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
 
           {/* Sections */}

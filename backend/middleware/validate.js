@@ -17,6 +17,51 @@ const password = z.string().min(8, 'Password must be at least 8 characters')
   .regex(/(?=.*\d)/, 'Password must contain a digit');
 const trimStr = z.string().trim();
 const positiveInt = z.number().int().positive();
+const guideItem = trimStr.min(2).max(500);
+
+const learningGuideSchema = z.object({
+  objective: trimStr.max(2000).optional().default(''),
+  outcomes: z.array(guideItem).max(20).optional().default([]),
+  preparationChecklist: z.array(guideItem).max(30).optional().default([]),
+  timingBreakdown: z.array(
+    z.object({
+      phase: trimStr.min(2).max(120),
+      durationMinutes: z.number().int().min(1).max(600),
+    })
+  ).max(12).optional().default([]),
+  conductSteps: z.array(
+    z.object({
+      title: trimStr.min(2).max(200),
+      durationMinutes: z.number().int().min(1).max(600).optional(),
+      details: z.array(guideItem).max(20).optional().default([]),
+    })
+  ).max(20).optional().default([]),
+  rubricMappingTips: z.array(guideItem).max(20).optional().default([]),
+  commonMistakes: z.array(guideItem).max(20).optional().default([]),
+  bestPractices: z.array(guideItem).max(20).optional().default([]),
+});
+
+const learningGuideUpdateSchema = z.object({
+  objective: trimStr.max(2000).optional(),
+  outcomes: z.array(guideItem).max(20).optional(),
+  preparationChecklist: z.array(guideItem).max(30).optional(),
+  timingBreakdown: z.array(
+    z.object({
+      phase: trimStr.min(2).max(120),
+      durationMinutes: z.number().int().min(1).max(600),
+    })
+  ).max(12).optional(),
+  conductSteps: z.array(
+    z.object({
+      title: trimStr.min(2).max(200),
+      durationMinutes: z.number().int().min(1).max(600).optional(),
+      details: z.array(guideItem).max(20).optional(),
+    })
+  ).max(20).optional(),
+  rubricMappingTips: z.array(guideItem).max(20).optional(),
+  commonMistakes: z.array(guideItem).max(20).optional(),
+  bestPractices: z.array(guideItem).max(20).optional(),
+});
 
 // ---- Schema Definitions ----
 
@@ -228,6 +273,32 @@ const schemas = {
         })
       ).optional().default([]),
       guidelines: z.string().max(10000).optional().default(''),
+      learningGuide: learningGuideSchema.optional().default({}),
+      isGuidePublished: z.boolean().optional().default(false),
+      guidePriority: z.number().int().min(1).max(9999).optional().default(100),
+    }),
+  }),
+
+  templateUpdate: z.object({
+    body: z.object({
+      activityType: trimStr.min(2).max(100).optional(),
+      description: z.string().max(1000).optional(),
+      defaultRubrics: z.array(
+        z.object({
+          name: trimStr.min(2).max(200),
+          criteria: z.object({
+            scale1: z.string().max(500).default(''),
+            scale2: z.string().max(500).default(''),
+            scale3: z.string().max(500).default(''),
+            scale4: z.string().max(500).default(''),
+            scale5: z.string().max(500).default(''),
+          }),
+        })
+      ).optional(),
+      guidelines: z.string().max(10000).optional(),
+      learningGuide: learningGuideUpdateSchema.optional(),
+      isGuidePublished: z.boolean().optional(),
+      guidePriority: z.number().int().min(1).max(9999).optional(),
     }),
   }),
 

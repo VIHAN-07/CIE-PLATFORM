@@ -19,6 +19,58 @@ const templateRubricSchema = new mongoose.Schema({
   },
 });
 
+const guideTimingBlockSchema = new mongoose.Schema(
+  {
+    phase: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    durationMinutes: {
+      type: Number,
+      min: 1,
+      max: 600,
+      default: 5,
+    },
+  },
+  { _id: false }
+);
+
+const guideStepSchema = new mongoose.Schema(
+  {
+    title: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    durationMinutes: {
+      type: Number,
+      min: 1,
+      max: 600,
+    },
+    details: [{ type: String, trim: true }],
+  },
+  { _id: false }
+);
+
+const learningGuideSchema = new mongoose.Schema(
+  {
+    objective: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    outcomes: [{ type: String, trim: true }],
+    preparationChecklist: [{ type: String, trim: true }],
+    timingBreakdown: [guideTimingBlockSchema],
+    conductSteps: [guideStepSchema],
+    rubricMappingTips: [{ type: String, trim: true }],
+    commonMistakes: [{ type: String, trim: true }],
+    bestPractices: [{ type: String, trim: true }],
+  },
+  { _id: false }
+);
+
 const activityTemplateSchema = new mongoose.Schema(
   {
     activityType: {
@@ -35,6 +87,27 @@ const activityTemplateSchema = new mongoose.Schema(
     guidelines: {
       type: String,
       default: '',
+    },
+    learningGuide: {
+      type: learningGuideSchema,
+      default: () => ({}),
+    },
+    isGuidePublished: {
+      type: Boolean,
+      default: false,
+    },
+    guidePriority: {
+      type: Number,
+      min: 1,
+      max: 9999,
+      default: 100,
+    },
+    guideLastUpdatedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+    },
+    guideLastUpdatedAt: {
+      type: Date,
     },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
