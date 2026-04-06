@@ -2,6 +2,7 @@ services:
   mongodb:
     image: mongo:7
     container_name: pict-cie-mongo
+    profiles: ['localdb']
     restart: unless-stopped
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
@@ -26,9 +27,6 @@ services:
     restart: unless-stopped
     env_file:
       - ./backend/.env
-    depends_on:
-      mongodb:
-        condition: service_healthy
     networks:
       - cie-network
     volumes:
