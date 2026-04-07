@@ -4,6 +4,24 @@
 
 const PDFDocument = require('pdfkit');
 
+function formatDate(value) {
+  if (!value) return 'N/A';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return 'N/A';
+  return d.toLocaleString();
+}
+
+function ensurePageSpace(doc, needed = 80) {
+  const bottom = doc.page.height - doc.page.margins.bottom;
+  if (doc.y + needed > bottom) {
+    doc.addPage();
+  }
+}
+
+function textOrNA(value) {
+  return `${value || ''}`.trim() || 'N/A';
+}
+
 /**
  * Generate NAAC/NBA report as PDF buffer.
  */
@@ -68,4 +86,171 @@ async function generateReportPDF(reportData) {
   });
 }
 
-module.exports = { generateReportPDF };
+/**
+ * Generate detailed activity report PDF buffer with optional conduction images.
+ */
+async function generateActivityReportPDF(reportData) {
+  return new Promise((resolve, reject) => {
+    try {
+      const doc = new PDFDocument({ margin: 42, size: 'A4' });
+      const buffers = [];
+
+      doc.on('data', (chunk) => buffers.push(chunk));
+      doc.on('end', () => resolve(Buffer.concat(buffers)));
+
+      const { activity, subject, faculty, rubrics, studentRows, summary, templateGuide, images } = reportData;
+
+      // Header
+      doc.fontSize(18).font('Helvetica-Bold').text('PICT Smart CIE Activity Report', { align: 'center' });
+      doc.moveDown(0.6);
+      doc.fontSize(13).font('Helvetica-Bold').text(textOrNA(activity.name), { align: 'center' });
+      doc.moveDown();
+
+      // Activity metadata
+      doc.fontSize(12).font('Helvetica-Bold').text('1. Activity Information');
+      doc.moveDown(0.3);
+      doc.fontSize(10).font('Helvetica');
+      doc.text(`Activity ID: ${textOrNA(activity.id)}`);
+      doc.text(`Type: ${textOrNA(activity.type)}`);
+      doc.text(`Topic: ${textOrNA(activity.topic)}`);
+      doc.text(`Total Marks: ${Number(activity.totalMarks) || 0}`);
+      doc.text(`Status: ${textOrNA(activity.status).toUpperCase()}`);
+      doc.text(`Created At: ${formatDate(activity.createdAt)}`);
+      doc.text(`Submitted At: ${formatDate(activity.submittedAt)}`);
+      doc.text(`Locked At: ${formatDate(activity.lockedAt)}`);
+      doc.moveDown(0.4);
+      doc.text(`Subject: ${textOrNA(subject.name)} (${textOrNA(subject.code)})`);
+      doc.text(`Class: ${textOrNA(subject.className)}`);
+      doc.text(`Academic Year: ${textOrNA(subject.academicYear)}`);
+      doc.text(`Faculty: ${textOrNA(faculty.name)} (${textOrNA(faculty.email)})`);
+
+      if (activity.guidelines) {
+        doc.moveDown(0.5);
+        doc.font('Helvetica-Bold').text('Guidelines');
+        doc.font('Helvetica').text(activity.guidelines, { lineGap: 2 });
+      }
+
+      if (activity.videoUrl) {
+        doc.moveDown(0.4);
+        doc.font('Helvetica-Bold').text('Reference Video URL');
+        doc.font('Helvetica').text(activity.videoUrl);
+      }
+
+      // Conduction guide
+      if (templateGuide) {
+        ensurePageSpace(doc, 90);
+        doc.moveDown();
+        doc.fontSize(12).font('Helvetica-Bold').text('2. Conduction Guide Snapshot');
+        doc.moveDown(0.3);
+        doc.fontSize(10).font('Helvetica');
+        doc.text(`Objective: ${textOrNA(templateGuide.objective)}`);
+
+        const outcomes = Array.isArray(templateGuide.outcomes) ? templateGuide.outcomes : [];
+        if (outcomes.length) {
+          doc.moveDown(0.2).font('Helvetica-Bold').text('Outcomes');
+          doc.font('Helvetica');
+          outcomes.forEach((o) => doc.text(`- ${o}`));
+        }
+
+        const bestPractices = Array.isArray(templateGuide.bestPractices) ? templateGuide.bestPractices : [];
+        if (bestPractices.length) {
+          doc.moveDown(0.2).font('Helvetica-Bold').text('Best Practices');
+          doc.font('Helvetica');
+          bestPractices.forEach((p) => doc.text(`- ${p}`));
+        }
+      }
+
+      // Rubrics and criteria
+      ensurePageSpace(doc, 120);
+      doc.moveDown();
+      doc.fontSize(12).font('Helvetica-Bold').text('3. Rubrics And Criteria');
+      doc.moveDown(0.4);
+
+      if (!rubrics.length) {
+        doc.fontSize(10).font('Helvetica').text('No rubrics configured for this activity.');
+      } else {
+        rubrics.forEach((rubric, index) => {
+          ensurePageSpace(doc, 120);
+          doc.fontSize(10).font('Helvetica-Bold').text(`${index + 1}. ${textOrNA(rubric.name)}`);
+          doc.font('Helvetica');
+          doc.text(`   1: ${textOrNA(rubric.criteria?.scale1)}`);
+          doc.text(`   2: ${textOrNA(rubric.criteria?.scale2)}`);
+          doc.text(`   3: ${textOrNA(rubric.criteria?.scale3)}`);
+          doc.text(`   4: ${textOrNA(rubric.criteria?.scale4)}`);
+          doc.text(`   5: ${textOrNA(rubric.criteria?.scale5)}`);
+          doc.moveDown(0.35);
+        });
+      }
+
+      // Score summary
+      ensurePageSpace(doc, 110);
+      doc.moveDown();
+      doc.fontSize(12).font('Helvetica-Bold').text('4. Score Summary');
+      doc.moveDown(0.3);
+      doc.fontSize(10).font('Helvetica');
+      doc.text(`Total Students: ${Number(summary.totalStudents) || 0}`);
+      doc.text(`Students With Scores: ${Number(summary.gradedStudents) || 0}`);
+      doc.text(`Average Activity Marks: ${Number(summary.averageMarks || 0).toFixed(2)} / ${Number(activity.totalMarks) || 0}`);
+
+      // Student-level details
+      ensurePageSpace(doc, 140);
+      doc.moveDown();
+      doc.fontSize(12).font('Helvetica-Bold').text('5. Student-Wise Details');
+      doc.moveDown(0.2);
+
+      const maxRaw = rubrics.length * 5;
+      if (!studentRows.length) {
+        doc.fontSize(10).font('Helvetica').text('No students found for this class and academic year.');
+      } else {
+        studentRows.forEach((row, idx) => {
+          ensurePageSpace(doc, 70);
+          doc.fontSize(10).font('Helvetica-Bold')
+            .text(`${idx + 1}. ${textOrNA(row.rollNo)} - ${textOrNA(row.name)}`);
+
+          const rubricLine = rubrics
+            .map((r, i) => `R${i + 1}:${row.rubricScores[String(r._id)] ?? '-'}`)
+            .join('  ');
+          doc.font('Helvetica').text(`Scores: ${rubricLine || 'N/A'}`);
+          doc.text(`Raw: ${row.rawTotal}/${maxRaw || 0}    Activity Marks: ${Number(row.activityMarks || 0).toFixed(2)}/${Number(activity.totalMarks) || 0}`);
+          doc.moveDown(0.25);
+        });
+      }
+
+      // Conduction images
+      if (Array.isArray(images) && images.length > 0) {
+        doc.addPage();
+        doc.fontSize(12).font('Helvetica-Bold').text('6. Activity Conduction Images');
+        doc.moveDown(0.5);
+
+        images.forEach((image, idx) => {
+          ensurePageSpace(doc, 260);
+          doc.fontSize(10).font('Helvetica-Bold').text(`Image ${idx + 1}: ${textOrNA(image.originalname)}`);
+          doc.moveDown(0.2);
+
+          try {
+            doc.image(image.buffer, {
+              fit: [500, 220],
+              align: 'center',
+              valign: 'center',
+            });
+            doc.moveDown(0.5);
+          } catch {
+            doc.fontSize(9).font('Helvetica').text('Could not render this image in PDF.');
+            doc.moveDown(0.4);
+          }
+        });
+      }
+
+      // Footer
+      doc.moveDown();
+      doc.fontSize(8).font('Helvetica')
+        .text(`Generated by: ${textOrNA(reportData.generatedBy)} on ${formatDate(new Date())}`, { align: 'center' });
+
+      doc.end();
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+module.exports = { generateReportPDF, generateActivityReportPDF };

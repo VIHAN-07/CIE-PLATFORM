@@ -9,6 +9,7 @@ import api from '../api/axios';
 import toast from 'react-hot-toast';
 import RubricEditor from '../components/RubricEditor';
 import ConductionGuidelines from '../components/ConductionGuidelines';
+import Modal from '../components/Modal';
 import { getYouTubeEmbedUrl } from '../utils/videoEmbed';
 
 export default function ActivityDetailPage() {
@@ -19,6 +20,9 @@ export default function ActivityDetailPage() {
   const [rubrics, setRubrics] = useState([]);
   const [learningGuide, setLearningGuide] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportImages, setReportImages] = useState([]);
+  const [reportLoading, setReportLoading] = useState(false);
 
   useEffect(() => { load(); }, [id]);
 
@@ -97,6 +101,45 @@ export default function ActivityDetailPage() {
     }
   };
 
+  const handleOpenReportModal = () => {
+    setReportImages([]);
+    setShowReportModal(true);
+  };
+
+  const handleGenerateReport = async () => {
+    try {
+      setReportLoading(true);
+      const formData = new FormData();
+      reportImages.forEach((file) => formData.append('images', file));
+
+      const response = await api.post(`/exports/activity/${id}/report-pdf`, formData, {
+        responseType: 'blob',
+      });
+
+      const contentDisposition = response.headers['content-disposition'] || '';
+      const match = contentDisposition.match(/filename="?([^\"]+)"?/i);
+      const fallbackName = `${(activity.name || 'Activity').replace(/[^a-zA-Z0-9-_]/g, '_')}_Activity_Report.pdf`;
+      const filename = match?.[1] || fallbackName;
+
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      setShowReportModal(false);
+      toast.success('Activity report downloaded');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to generate report');
+    } finally {
+      setReportLoading(false);
+    }
+  };
+
   if (loading) return <div className="text-center py-12"><Spinner /></div>;
   if (!activity) return null;
 
@@ -126,6 +169,7 @@ export default function ActivityDetailPage() {
       {/* Action buttons */}
       <div className="flex flex-wrap gap-3 mb-6">
         <Link to={`/grading/${activity._id}`} className="btn-primary">📝 Open Grading Grid</Link>
+        <button onClick={handleOpenReportModal} className="btn-secondary">📄 Generate Activity Report</button>
         {activity.activityType === 'Quiz' && (
           <>
             <Link to={`/quiz/builder/${activity._id}`} className="btn-primary bg-indigo-600 hover:bg-indigo-700">
@@ -194,6 +238,64 @@ export default function ActivityDetailPage() {
           onRefresh={load}
         />
       </div>
+
+      <Modal
+        show={showReportModal}
+        onClose={() => !reportLoading && setShowReportModal(false)}
+        title="Generate Activity Report PDF"
+        wide
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Add optional conduction images. The report will include activity metadata, guidelines, rubrics, scores, and the selected images.
+          </p>
+
+          <div>
+            <label className="label">Conduction Images (optional)</label>
+            <input
+              type="file"
+              accept="image/png,image/jpeg"
+              multiple
+              className="input"
+              onChange={(e) => {
+                const files = Array.from(e.target.files || []);
+                setReportImages(files.slice(0, 8));
+              }}
+            />
+            <p className="text-xs text-gray-500 mt-1">Up to 8 images (JPG/PNG).</p>
+          </div>
+
+          {reportImages.length > 0 && (
+            <div className="border rounded-lg p-3 bg-gray-50">
+              <p className="text-sm font-medium mb-2">Selected Files</p>
+              <ul className="text-sm text-gray-700 space-y-1">
+                {reportImages.map((file, idx) => (
+                  <li key={`${file.name}-${idx}`}>• {file.name}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => setShowReportModal(false)}
+              disabled={reportLoading}
+              className="btn-secondary"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleGenerateReport}
+              disabled={reportLoading}
+              className="btn-primary"
+            >
+              {reportLoading ? 'Generating...' : 'Download PDF'}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
