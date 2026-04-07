@@ -5,6 +5,7 @@
 
 import { useState } from 'react';
 import { HiChevronDown, HiChevronUp } from 'react-icons/hi';
+import { getYouTubeEmbedUrl } from '../utils/videoEmbed';
 
 const ACTIVITY_GUIDELINES = {
   PPT: {
@@ -101,6 +102,7 @@ const ACTIVITY_GUIDELINES = {
     icon: '💬',
     title: 'Group Discussion',
     objective: 'Evaluate communication skills, logical reasoning, teamwork, leadership, and the ability to articulate and defend viewpoints.',
+    videoUrl: 'https://youtu.be/69JpdGqM3NM',
     sections: [
       {
         heading: 'Pre-Activity Preparation',
@@ -399,6 +401,7 @@ function hasStructuredGuide(guide) {
   if (!guide) return false;
   return Boolean(
     guide.objective ||
+    guide.videoUrl ||
     asList(guide.outcomes).length ||
     asList(guide.preparationChecklist).length ||
     asList(guide.rubricMappingTips).length ||
@@ -410,7 +413,7 @@ function hasStructuredGuide(guide) {
 }
 
 /** Renders conduction guidelines for a given activity type */
-export default function ConductionGuidelines({ activityType, collapsible = false, guideData = null }) {
+export default function ConductionGuidelines({ activityType, collapsible = false, guideData = null, showVideo = true }) {
   const [expanded, setExpanded] = useState(!collapsible);
 
   const fallback = ACTIVITY_GUIDELINES[activityType];
@@ -422,6 +425,7 @@ export default function ConductionGuidelines({ activityType, collapsible = false
       icon: fallback?.icon || '📘',
       title: fallback?.title || `${activityType} Activity`,
       objective: structuredGuide.objective || fallback?.objective || '',
+      videoUrl: structuredGuide.videoUrl || fallback?.videoUrl || '',
       outcomes: asList(structuredGuide.outcomes),
       sections: buildStructuredSections(structuredGuide),
       totalDurationMinutes: Number(structuredGuide.totalDurationMinutes) || 0,
@@ -429,6 +433,7 @@ export default function ConductionGuidelines({ activityType, collapsible = false
     : fallback;
 
   if (!data) return null;
+  const videoEmbedUrl = getYouTubeEmbedUrl(data.videoUrl);
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
@@ -481,6 +486,22 @@ export default function ConductionGuidelines({ activityType, collapsible = false
                     </li>
                   ))}
                 </ul>
+              </div>
+            )}
+            {showVideo && videoEmbedUrl && (
+              <div className="mt-4">
+                <p className="text-xs font-semibold text-blue-900 mb-2 uppercase tracking-wide">Reference Video</p>
+                <div className="aspect-video w-full overflow-hidden rounded-lg border border-blue-200 bg-black">
+                  <iframe
+                    src={videoEmbedUrl}
+                    title={`${data.title} reference video`}
+                    className="h-full w-full"
+                    loading="lazy"
+                    referrerPolicy="strict-origin-when-cross-origin"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                  />
+                </div>
               </div>
             )}
           </div>

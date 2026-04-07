@@ -115,6 +115,9 @@ const TEMPLATES = [
     activityType: 'GD',
     description: 'Group Discussion on technical/current topics',
     guidelines: 'Groups of 6-10 students discuss a topic for 12-15 min. Evaluate individual participation, not group performance.',
+    learningGuide: {
+      videoUrl: 'https://youtu.be/69JpdGqM3NM',
+    },
     defaultRubrics: [
       {
         name: 'Content & Relevance',
@@ -201,6 +204,7 @@ const ACTIVITIES_DSAL = [
     totalMarks: 10,
     topic: 'Impact of AI on Software Development',
     guidelines: 'Discuss pros, cons, and future of AI in software engineering.',
+    videoUrl: 'https://youtu.be/69JpdGqM3NM',
   },
   {
     name: 'Viva: Trees & Graphs',

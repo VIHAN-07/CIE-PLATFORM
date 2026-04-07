@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 import api from '../api/axios';
 import toast from 'react-hot-toast';
 import Modal from '../components/Modal';
+import { isYouTubeUrl } from '../utils/videoEmbed';
 
 const EMPTY_RUBRIC = {
   name: '',
@@ -14,6 +15,7 @@ const EMPTY_RUBRIC = {
 
 const EMPTY_GUIDE_FORM = {
   objective: '',
+  videoUrl: '',
   outcomesText: '',
   preparationChecklistText: '',
   rubricMappingTipsText: '',
@@ -39,6 +41,13 @@ const toLines = (value = '') =>
     .map((item) => item.trim())
     .filter(Boolean);
 
+const formatApiError = (err, fallback = 'Error') => {
+  const data = err?.response?.data;
+  if (!data) return fallback;
+  if (Array.isArray(data.errors) && data.errors.length > 0) return data.errors[0];
+  return data.message || fallback;
+};
+
 function templateToGuideForm(template) {
   const guide = template.learningGuide || {};
   return {
@@ -50,6 +59,7 @@ function templateToGuideForm(template) {
     guidePriority: template.guidePriority || 100,
     learningGuide: {
       objective: guide.objective || '',
+      videoUrl: guide.videoUrl || '',
       outcomesText: (guide.outcomes || []).join('\n'),
       preparationChecklistText: (guide.preparationChecklist || []).join('\n'),
       rubricMappingTipsText: (guide.rubricMappingTips || []).join('\n'),
@@ -82,6 +92,7 @@ function buildTemplatePayload(form) {
     guidePriority: Number(form.guidePriority) || 100,
     learningGuide: {
       objective: form.learningGuide.objective,
+      videoUrl: form.learningGuide.videoUrl?.trim() || '',
       outcomes: toLines(form.learningGuide.outcomesText),
       preparationChecklist: toLines(form.learningGuide.preparationChecklistText),
       timingBreakdown: form.learningGuide.timingBreakdown
@@ -146,6 +157,13 @@ export default function TemplatesPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    const guideVideo = form.learningGuide.videoUrl?.trim() || '';
+    if (guideVideo && !isYouTubeUrl(guideVideo)) {
+      toast.error('Learning guide video must be a valid YouTube link.');
+      return;
+    }
+
     try {
       await api.post('/admin/templates', buildTemplatePayload(form));
       toast.success('Template created!');
@@ -153,7 +171,7 @@ export default function TemplatesPage() {
       setForm(EMPTY_FORM);
       load();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Error');
+      toast.error(formatApiError(err, 'Failed to create template'));
     }
   };
 
@@ -165,6 +183,12 @@ export default function TemplatesPage() {
   const handleGuideUpdate = async (e) => {
     e.preventDefault();
     if (!editGuideForm?._id) return;
+
+    const guideVideo = editGuideForm.learningGuide.videoUrl?.trim() || '';
+    if (guideVideo && !isYouTubeUrl(guideVideo)) {
+      toast.error('Learning guide video must be a valid YouTube link.');
+      return;
+    }
 
     try {
       const payload = buildTemplatePayload({
@@ -185,7 +209,7 @@ export default function TemplatesPage() {
       setEditGuideForm(null);
       load();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Error');
+      toast.error(formatApiError(err, 'Failed to update learning guide'));
     }
   };
 
@@ -501,6 +525,22 @@ function LearningGuideFields({
           })}
           className="input"
         />
+      </div>
+
+      <div>
+        <label className="label">Video Link (YouTube)</label>
+        <input
+          type="url"
+          value={form.learningGuide.videoUrl || ''}
+          onChange={(e) => setForm({
+            ...form,
+            learningGuide: { ...form.learningGuide, videoUrl: e.target.value },
+          })}
+          className="input"
+          placeholder="https://youtu.be/69JpdGqM3NM"
+        />
+        <p className="text-xs text-gray-500 mt-1">If valid, this video appears embedded below guide/activity descriptions.</p>
+        <p className="text-xs text-gray-500 mt-1">Only YouTube links are supported right now.</p>
       </div>
 
       <div>

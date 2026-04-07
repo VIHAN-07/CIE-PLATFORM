@@ -395,6 +395,19 @@ export default function AIToolsPage() {
   const [aiType, setAiType] = useState('PPT');
   const [aiTopic, setAiTopic] = useState('');
 
+  const getAiErrorMessage = (err) => {
+    const status = err?.response?.status;
+    const apiMessage = err?.response?.data?.message;
+    const raw = `${apiMessage || err?.message || ''}`.toLowerCase();
+
+    // Friendly message for provider quota exhaustion surfaced as 429/502.
+    if (status === 429 || raw.includes('quota') || raw.includes('resource_exhausted') || raw.includes('429')) {
+      return 'Gemini quota exceeded or unavailable for this key. Check AI Studio quota/billing or use another API key.';
+    }
+
+    return apiMessage || 'Generation failed';
+  };
+
   useEffect(() => {
     api.get('/subjects').then((r) => setSubjects(r.data));
   }, []);
@@ -438,7 +451,7 @@ export default function AIToolsPage() {
       setRubricResult(data.rubrics);
       toast.success('Rubrics generated!');
     } catch (err) {
-      toast.error('Generation failed');
+      toast.error(getAiErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -453,7 +466,7 @@ export default function AIToolsPage() {
       setGuidelinesResult(data.guidelines);
       toast.success('Guidelines generated!');
     } catch (err) {
-      toast.error('Generation failed');
+      toast.error(getAiErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -468,7 +481,7 @@ export default function AIToolsPage() {
       setInsightsResult(data);
       toast.success('Insights generated!');
     } catch (err) {
-      toast.error('Generation failed');
+      toast.error(getAiErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -483,7 +496,7 @@ export default function AIToolsPage() {
       setReportResult(data.report);
       toast.success('Report generated!');
     } catch (err) {
-      toast.error('Generation failed');
+      toast.error(getAiErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -502,7 +515,7 @@ export default function AIToolsPage() {
       setFeedbackResult(data);
       toast.success('Feedback generated!');
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Generation failed');
+      toast.error(getAiErrorMessage(err));
     } finally {
       setLoading(false);
     }

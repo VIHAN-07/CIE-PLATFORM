@@ -54,6 +54,7 @@ function normalizeLearningGuide(template) {
     rubricMappingTips: cleanList(guide.rubricMappingTips),
     commonMistakes: cleanList(guide.commonMistakes),
     bestPractices: cleanList(guide.bestPractices),
+    videoUrl: (guide.videoUrl || '').trim(),
     totalDurationMinutes: totalFromTiming || totalFromSteps || 0,
   };
 }
@@ -67,7 +68,8 @@ function hasGuideContent(guide) {
     guide.conductSteps.length ||
     guide.rubricMappingTips.length ||
     guide.commonMistakes.length ||
-    guide.bestPractices.length
+    guide.bestPractices.length ||
+    guide.videoUrl
   );
 }
 

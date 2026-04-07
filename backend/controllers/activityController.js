@@ -56,7 +56,7 @@ exports.getById = async (req, res, next) => {
 /** POST /api/activities */
 exports.create = async (req, res, next) => {
   try {
-    const { name, activityType, subjectName, classId, academicYearId, totalMarks, topic, guidelines } = req.body;
+    const { name, activityType, subjectName, classId, academicYearId, totalMarks, topic, guidelines, videoUrl } = req.body;
 
     // Find or create subject by name for this faculty/class/year
     let subjectDoc = await Subject.findOne({
@@ -77,6 +77,11 @@ exports.create = async (req, res, next) => {
       });
     }
 
+    // Load template once to inherit defaults (rubrics + optional guide video)
+    const template = await ActivityTemplate.findOne({ activityType });
+    const inheritedVideoUrl = `${template?.learningGuide?.videoUrl || ''}`.trim();
+    const resolvedVideoUrl = `${videoUrl || ''}`.trim() || inheritedVideoUrl;
+
     const activity = await Activity.create({
       name,
       activityType,
@@ -85,10 +90,10 @@ exports.create = async (req, res, next) => {
       totalMarks,
       topic,
       guidelines,
+      videoUrl: resolvedVideoUrl,
     });
 
     // Auto-copy rubrics from template or use built-in defaults
-    const template = await ActivityTemplate.findOne({ activityType });
     let rubricSource = template?.defaultRubrics;
 
     // Fallback to built-in default rubrics if no template exists

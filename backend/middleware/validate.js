@@ -19,6 +19,33 @@ const trimStr = z.string().trim();
 const positiveInt = z.number().int().positive();
 const guideItem = trimStr.min(2).max(500);
 
+function isYouTubeUrl(value) {
+  try {
+    const parsed = new URL(value);
+    const host = parsed.hostname.replace(/^www\./, '').toLowerCase();
+    let videoId = '';
+
+    if (host === 'youtu.be') {
+      videoId = parsed.pathname.split('/').filter(Boolean)[0] || '';
+    } else if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'music.youtube.com') {
+      if (parsed.pathname === '/watch') {
+        videoId = parsed.searchParams.get('v') || '';
+      } else if (parsed.pathname.startsWith('/shorts/')) {
+        videoId = parsed.pathname.split('/')[2] || '';
+      } else if (parsed.pathname.startsWith('/embed/')) {
+        videoId = parsed.pathname.split('/')[2] || '';
+      }
+    }
+
+    return /^[A-Za-z0-9_-]{11}$/.test(`${videoId}`.trim());
+  } catch {
+    return false;
+  }
+}
+
+const youtubeUrlField = z.string().trim()
+  .refine((value) => value === '' || isYouTubeUrl(value), 'Video URL must be a valid YouTube link');
+
 const learningGuideSchema = z.object({
   objective: trimStr.max(2000).optional().default(''),
   outcomes: z.array(guideItem).max(20).optional().default([]),
@@ -39,6 +66,7 @@ const learningGuideSchema = z.object({
   rubricMappingTips: z.array(guideItem).max(20).optional().default([]),
   commonMistakes: z.array(guideItem).max(20).optional().default([]),
   bestPractices: z.array(guideItem).max(20).optional().default([]),
+  videoUrl: youtubeUrlField.optional().default(''),
 });
 
 const learningGuideUpdateSchema = z.object({
@@ -61,6 +89,7 @@ const learningGuideUpdateSchema = z.object({
   rubricMappingTips: z.array(guideItem).max(20).optional(),
   commonMistakes: z.array(guideItem).max(20).optional(),
   bestPractices: z.array(guideItem).max(20).optional(),
+  videoUrl: youtubeUrlField.optional(),
 });
 
 // ---- Schema Definitions ----
@@ -149,6 +178,7 @@ const schemas = {
       totalMarks: z.number().min(1).max(1000),
       topic: trimStr.max(500).optional().default(''),
       guidelines: z.string().max(10000).optional().default(''),
+      videoUrl: youtubeUrlField.optional().default(''),
     }),
   }),
 
@@ -158,6 +188,7 @@ const schemas = {
       totalMarks: z.number().min(1).max(1000).optional(),
       topic: trimStr.max(500).optional(),
       guidelines: z.string().max(10000).optional(),
+      videoUrl: youtubeUrlField.optional(),
     }),
   }),
 

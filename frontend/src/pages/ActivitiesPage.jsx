@@ -9,7 +9,20 @@ import toast from 'react-hot-toast';
 import Modal from '../components/Modal';
 import { useAuth } from '../context/AuthContext';
 
-const ACTIVITY_TYPES = ['PPT', 'Flip Classroom', 'GD', 'Viva', 'Lab', 'Assignment', 'Quiz', 'Project', 'Seminar', 'Other'];
+const DEFAULT_ACTIVITY_TYPES = ['PPT', 'Flip Classroom', 'GD', 'Viva', 'Lab', 'Assignment', 'Quiz', 'Project', 'Seminar', 'Other'];
+
+function uniqueNonEmptyTypes(types = []) {
+  const seen = new Set();
+  return types
+    .map((type) => `${type || ''}`.trim())
+    .filter((type) => {
+      if (!type) return false;
+      const key = type.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
 
 export default function ActivitiesPage() {
   const { isAdmin } = useAuth();
@@ -19,6 +32,7 @@ export default function ActivitiesPage() {
   const [years, setYears] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ name: '', activityType: 'PPT', subjectName: '', classId: '', academicYearId: '', totalMarks: 10, topic: '' });
+  const [activityTypes, setActivityTypes] = useState(DEFAULT_ACTIVITY_TYPES);
   const [aiLoading, setAiLoading] = useState(false);
   const [facultyFilter, setFacultyFilter] = useState('all');
   const [facultySearch, setFacultySearch] = useState('');
@@ -26,9 +40,21 @@ export default function ActivitiesPage() {
   useEffect(() => { loadMeta(); }, []);
 
   const loadMeta = async () => {
-    const [c, y] = await Promise.all([api.get('/classes'), api.get('/academic-years')]);
+    const query = isAdmin ? '?includeUnpublished=true' : '';
+    const [c, y, g, t] = await Promise.all([
+      api.get('/classes'),
+      api.get('/academic-years'),
+      api.get(`/learning/guides${query}`).catch(() => ({ data: { guides: [] } })),
+      isAdmin ? api.get('/admin/templates').catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
+    ]);
     setClasses(c.data);
     setYears(y.data);
+
+    const guideTypes = (g.data?.guides || []).map((guide) => guide?.activityType || '');
+    const templateTypes = Array.isArray(t.data) ? t.data.map((template) => template?.activityType || '') : [];
+    const mergedTypes = uniqueNonEmptyTypes([...templateTypes, ...guideTypes]);
+    setActivityTypes(mergedTypes.length ? mergedTypes : DEFAULT_ACTIVITY_TYPES);
+
     if (c.data.length) setForm((f) => ({ ...f, classId: c.data[0]._id }));
     if (y.data.length) setForm((f) => ({ ...f, academicYearId: y.data[0]._id }));
     loadActivities();
@@ -40,8 +66,9 @@ export default function ActivitiesPage() {
   };
 
   const openCreate = () => {
+    const preferredType = activityTypes.includes('PPT') ? 'PPT' : (activityTypes[0] || 'PPT');
     setForm({
-      name: '', activityType: 'PPT', subjectName: '',
+      name: '', activityType: preferredType, subjectName: '',
       classId: classes.length ? classes[0]._id : '',
       academicYearId: years.length ? years[0]._id : '',
       totalMarks: 10, topic: '',
@@ -161,32 +188,32 @@ export default function ActivitiesPage() {
           )}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {group.items.map((a) => (
-              <Link key={a._id} to={`/activities/${a._id}`}
-                className="bg-white rounded-xl shadow-sm border p-5 hover:shadow-md transition group"
-              >
-                <div className="flex items-start justify-between mb-2">
-                  <h3 className="font-semibold text-gray-900 group-hover:text-primary-600">{a.name}</h3>
-                  <span className={`text-xs px-2 py-1 rounded-full ${
-                    a.status === 'draft' ? 'bg-yellow-100 text-yellow-700' :
-                    a.status === 'submitted' ? 'bg-green-100 text-green-700' :
-                    'bg-red-100 text-red-700'
-                  }`}>
-                    {a.status}
-                  </span>
-                </div>
-                <p className="text-sm text-gray-500">{a.activityType}</p>
-                <p className="text-sm text-gray-500 mt-1">Total Marks: <strong>{a.totalMarks}</strong></p>
-                <div className="mt-3 flex gap-2">
-                  <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
-                    {a.subject?.code || a.subject?.name}
-                  </span>
-                  {isAdmin && a.faculty && (
-                    <span className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded">
-                      {a.faculty.name}
+              <div key={a._id} className="bg-white rounded-xl shadow-sm border p-5 hover:shadow-md transition group">
+                <Link to={`/activities/${a._id}`} className="block">
+                  <div className="flex items-start justify-between mb-2">
+                    <h3 className="font-semibold text-gray-900 group-hover:text-primary-600">{a.name}</h3>
+                    <span className={`text-xs px-2 py-1 rounded-full ${
+                      a.status === 'draft' ? 'bg-yellow-100 text-yellow-700' :
+                      a.status === 'submitted' ? 'bg-green-100 text-green-700' :
+                      'bg-red-100 text-red-700'
+                    }`}>
+                      {a.status}
                     </span>
-                  )}
-                </div>
-              </Link>
+                  </div>
+                  <p className="text-sm text-gray-500">{a.activityType}</p>
+                  <p className="text-sm text-gray-500 mt-1">Total Marks: <strong>{a.totalMarks}</strong></p>
+                  <div className="mt-3 flex gap-2">
+                    <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
+                      {a.subject?.code || a.subject?.name}
+                    </span>
+                    {isAdmin && a.faculty && (
+                      <span className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded">
+                        {a.faculty.name}
+                      </span>
+                    )}
+                  </div>
+                </Link>
+              </div>
             ))}
           </div>
         </div>
@@ -207,7 +234,7 @@ export default function ActivitiesPage() {
             <div>
               <label className="label">Activity Type</label>
               <select value={form.activityType} onChange={(e) => setForm({ ...form, activityType: e.target.value })} className="input">
-                {ACTIVITY_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                {activityTypes.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
           </div>

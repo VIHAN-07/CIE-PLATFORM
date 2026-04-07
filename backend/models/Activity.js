@@ -41,6 +41,11 @@ const activitySchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    videoUrl: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     status: {
       type: String,
       enum: ['draft', 'submitted', 'locked'],

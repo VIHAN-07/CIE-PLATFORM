@@ -9,6 +9,7 @@ import api from '../api/axios';
 import toast from 'react-hot-toast';
 import RubricEditor from '../components/RubricEditor';
 import ConductionGuidelines from '../components/ConductionGuidelines';
+import { getYouTubeEmbedUrl } from '../utils/videoEmbed';
 
 export default function ActivityDetailPage() {
   const { id } = useParams();
@@ -99,6 +100,8 @@ export default function ActivityDetailPage() {
   if (loading) return <div className="text-center py-12"><Spinner /></div>;
   if (!activity) return null;
 
+  const activityVideoEmbedUrl = getYouTubeEmbedUrl(activity.videoUrl || learningGuide?.videoUrl || '');
+
   return (
     <div>
       {/* Header */}
@@ -153,8 +156,25 @@ export default function ActivityDetailPage() {
 
       {/* Conduction Guidelines */}
       <div className="mb-6">
-        <ConductionGuidelines activityType={activity.activityType} collapsible guideData={learningGuide} />
+        <ConductionGuidelines activityType={activity.activityType} collapsible guideData={learningGuide} showVideo={false} />
       </div>
+
+      {activityVideoEmbedUrl && (
+        <div className="bg-white rounded-xl border p-5 mb-6">
+          <h3 className="font-semibold text-gray-900 mb-3">Reference Video</h3>
+          <div className="aspect-video w-full overflow-hidden rounded-lg border bg-black">
+            <iframe
+              src={activityVideoEmbedUrl}
+              title={`${activity.name} reference video`}
+              className="h-full w-full"
+              loading="lazy"
+              referrerPolicy="strict-origin-when-cross-origin"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+            />
+          </div>
+        </div>
+      )}
 
       {/* Custom Guidelines */}
       {activity.guidelines && (

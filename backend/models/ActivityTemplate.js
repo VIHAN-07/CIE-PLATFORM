@@ -67,6 +67,11 @@ const learningGuideSchema = new mongoose.Schema(
     rubricMappingTips: [{ type: String, trim: true }],
     commonMistakes: [{ type: String, trim: true }],
     bestPractices: [{ type: String, trim: true }],
+    videoUrl: {
+      type: String,
+      default: '',
+      trim: true,
+    },
   },
   { _id: false }
 );
