@@ -14,6 +14,7 @@ router.use(auth, roleCheck('admin'));
 // User management
 router.get('/users', ctrl.getUsers);
 router.put('/users/:id', validate('adminUserUpdate'), ctrl.updateUser);
+router.delete('/users/:id', validate('adminUserDelete'), ctrl.deleteUser);
 router.get('/faculty', ctrl.getFaculty);
 
 // Activity templates

@@ -344,6 +344,12 @@ const schemas = {
     }),
   }),
 
+  adminUserDelete: z.object({
+    params: z.object({
+      id: objectId,
+    }),
+  }),
+
   // Pagination query params
   paginatedQuery: z.object({
     query: z.object({

@@ -6,8 +6,10 @@ import { useState, useEffect } from 'react';
 import api from '../api/axios';
 import toast from 'react-hot-toast';
 import Modal from '../components/Modal';
+import { useAuth } from '../context/AuthContext';
 
 export default function UsersPage() {
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'faculty', department: '' });
@@ -62,6 +64,24 @@ export default function UsersPage() {
     }
   };
 
+  const handleDelete = async (user) => {
+    if (currentUser?._id === user._id) {
+      toast.error('You cannot delete your own account');
+      return;
+    }
+
+    const confirmed = window.confirm(`Delete user ${user.email}? This action cannot be undone.`);
+    if (!confirmed) return;
+
+    try {
+      await api.delete(`/admin/users/${user._id}`);
+      toast.success('User deleted');
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to delete user');
+    }
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -100,6 +120,12 @@ export default function UsersPage() {
                 <td className="px-6 py-4 text-right">
                   <button onClick={() => toggleActive(u)} className="text-sm text-primary-600 hover:underline">
                     {u.isActive ? 'Deactivate' : 'Activate'}
+                  </button>
+                  <button
+                    onClick={() => handleDelete(u)}
+                    className="ml-4 text-sm text-red-600 hover:underline"
+                  >
+                    Delete
                   </button>
                 </td>
               </tr>

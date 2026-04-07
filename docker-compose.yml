@@ -32,7 +32,7 @@ services:
     container_name: pict-cie-backend
     restart: unless-stopped
     ports:
-      - '5000:5000'
+      - '5001:5000'
     env_file:
       - ./backend/.env
     networks:

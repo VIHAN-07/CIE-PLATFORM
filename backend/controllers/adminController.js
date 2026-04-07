@@ -75,6 +75,44 @@ exports.updateUser = async (req, res, next) => {
   }
 };
 
+/** DELETE /api/admin/users/:id */
+exports.deleteUser = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    if (String(req.user._id) === String(id)) {
+      return res.status(400).json({ success: false, message: 'You cannot delete your own account.' });
+    }
+
+    const user = await User.findById(id).select('-password');
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found.' });
+    }
+
+    if (user.role === 'admin') {
+      const adminCount = await User.countDocuments({ role: 'admin' });
+      if (adminCount <= 1) {
+        return res.status(400).json({ success: false, message: 'Cannot delete the last admin user.' });
+      }
+    }
+
+    await User.findByIdAndDelete(id);
+
+    audit.log({
+      req,
+      action: 'USER_DELETE',
+      entityType: 'User',
+      entityId: user._id,
+      description: `Admin deleted user ${user.email}`,
+      previousValue: user.toObject(),
+    });
+
+    res.json({ success: true, message: 'User deleted.' });
+  } catch (err) {
+    next(err);
+  }
+};
+
 /** GET /api/admin/faculty — List faculty only */
 exports.getFaculty = async (req, res, next) => {
   try {
