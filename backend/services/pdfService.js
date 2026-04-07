@@ -22,6 +22,73 @@ function textOrNA(value) {
   return `${value || ''}`.trim() || 'N/A';
 }
 
+function drawSectionTitle(doc, title) {
+  const contentWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  ensurePageSpace(doc, 34);
+  doc.moveDown(0.4);
+  const x = doc.page.margins.left;
+  const y = doc.y;
+
+  doc.save();
+  doc.roundedRect(x, y, contentWidth, 22, 4).fill('#EEF4FF');
+  doc.restore();
+
+  doc.fillColor('#1D4ED8')
+    .font('Helvetica-Bold')
+    .fontSize(11)
+    .text(title, x + 10, y + 6, { width: contentWidth - 20 });
+
+  doc.fillColor('#111827');
+  doc.y = y + 26;
+}
+
+function drawInfoGrid(doc, items) {
+  const contentWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const gap = 14;
+  const colWidth = (contentWidth - gap) / 2;
+
+  for (let i = 0; i < items.length; i += 2) {
+    ensurePageSpace(doc, 34);
+    const y = doc.y;
+    const left = items[i];
+    const right = items[i + 1];
+
+    if (left) {
+      doc.font('Helvetica-Bold').fontSize(9).fillColor('#374151')
+        .text(left.label, doc.page.margins.left, y, { width: colWidth });
+      doc.font('Helvetica').fontSize(10).fillColor('#111827')
+        .text(textOrNA(left.value), doc.page.margins.left, y + 12, { width: colWidth });
+    }
+
+    if (right) {
+      const rightX = doc.page.margins.left + colWidth + gap;
+      doc.font('Helvetica-Bold').fontSize(9).fillColor('#374151')
+        .text(right.label, rightX, y, { width: colWidth });
+      doc.font('Helvetica').fontSize(10).fillColor('#111827')
+        .text(textOrNA(right.value), rightX, y + 12, { width: colWidth });
+    }
+
+    doc.y = y + 30;
+  }
+}
+
+function addPageNumbers(doc) {
+  const range = doc.bufferedPageRange();
+  for (let i = range.start; i < range.start + range.count; i++) {
+    doc.switchToPage(i);
+    const pageNumber = i - range.start + 1;
+    const contentWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+    doc.fontSize(8)
+      .font('Helvetica')
+      .fillColor('#6B7280')
+      .text(`Page ${pageNumber} of ${range.count}`, doc.page.margins.left, doc.page.height - 24, {
+        width: contentWidth,
+        align: 'right',
+      });
+  }
+  doc.fillColor('#111827');
+}
+
 /**
  * Generate NAAC/NBA report as PDF buffer.
  */
@@ -92,40 +159,46 @@ async function generateReportPDF(reportData) {
 async function generateActivityReportPDF(reportData) {
   return new Promise((resolve, reject) => {
     try {
-      const doc = new PDFDocument({ margin: 42, size: 'A4' });
+      const doc = new PDFDocument({ margin: 42, size: 'A4', bufferPages: true });
       const buffers = [];
 
       doc.on('data', (chunk) => buffers.push(chunk));
       doc.on('end', () => resolve(Buffer.concat(buffers)));
 
       const { activity, subject, faculty, rubrics, studentRows, summary, templateGuide, images } = reportData;
+      const contentWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+      const maxRaw = rubrics.length * 5;
 
-      // Header
-      doc.fontSize(18).font('Helvetica-Bold').text('PICT Smart CIE Activity Report', { align: 'center' });
+      // Cover header
+      doc.fontSize(18).font('Helvetica-Bold').fillColor('#111827')
+        .text('PICT Smart CIE Activity Report', { align: 'center' });
       doc.moveDown(0.6);
-      doc.fontSize(13).font('Helvetica-Bold').text(textOrNA(activity.name), { align: 'center' });
-      doc.moveDown();
+      doc.fontSize(13).font('Helvetica-Bold').fillColor('#1F2937')
+        .text(textOrNA(activity.name), { align: 'center' });
+      doc.moveDown(0.2);
+      doc.fontSize(10).font('Helvetica').fillColor('#6B7280')
+        .text(`Generated: ${formatDate(new Date())}`, { align: 'center' });
+      doc.fillColor('#111827').moveDown();
 
-      // Activity metadata
-      doc.fontSize(12).font('Helvetica-Bold').text('1. Activity Information');
-      doc.moveDown(0.3);
-      doc.fontSize(10).font('Helvetica');
-      doc.text(`Activity ID: ${textOrNA(activity.id)}`);
-      doc.text(`Type: ${textOrNA(activity.type)}`);
-      doc.text(`Topic: ${textOrNA(activity.topic)}`);
-      doc.text(`Total Marks: ${Number(activity.totalMarks) || 0}`);
-      doc.text(`Status: ${textOrNA(activity.status).toUpperCase()}`);
-      doc.text(`Created At: ${formatDate(activity.createdAt)}`);
-      doc.text(`Submitted At: ${formatDate(activity.submittedAt)}`);
-      doc.text(`Locked At: ${formatDate(activity.lockedAt)}`);
-      doc.moveDown(0.4);
-      doc.text(`Subject: ${textOrNA(subject.name)} (${textOrNA(subject.code)})`);
-      doc.text(`Class: ${textOrNA(subject.className)}`);
-      doc.text(`Academic Year: ${textOrNA(subject.academicYear)}`);
-      doc.text(`Faculty: ${textOrNA(faculty.name)} (${textOrNA(faculty.email)})`);
+      drawSectionTitle(doc, '1. Activity Information');
+      drawInfoGrid(doc, [
+        { label: 'Activity ID', value: activity.id },
+        { label: 'Activity Type', value: activity.type },
+        { label: 'Topic', value: activity.topic },
+        { label: 'Status', value: textOrNA(activity.status).toUpperCase() },
+        { label: 'Total Marks', value: Number(activity.totalMarks) || 0 },
+        { label: 'Created At', value: formatDate(activity.createdAt) },
+        { label: 'Submitted At', value: formatDate(activity.submittedAt) },
+        { label: 'Locked At', value: formatDate(activity.lockedAt) },
+        { label: 'Subject', value: `${textOrNA(subject.name)} (${textOrNA(subject.code)})` },
+        { label: 'Class', value: subject.className },
+        { label: 'Academic Year', value: subject.academicYear },
+        { label: 'Faculty', value: `${textOrNA(faculty.name)} (${textOrNA(faculty.email)})` },
+      ]);
 
       if (activity.guidelines) {
-        doc.moveDown(0.5);
+        ensurePageSpace(doc, 60);
+        doc.moveDown(0.2);
         doc.font('Helvetica-Bold').text('Guidelines');
         doc.font('Helvetica').text(activity.guidelines, { lineGap: 2 });
       }
@@ -138,10 +211,7 @@ async function generateActivityReportPDF(reportData) {
 
       // Conduction guide
       if (templateGuide) {
-        ensurePageSpace(doc, 90);
-        doc.moveDown();
-        doc.fontSize(12).font('Helvetica-Bold').text('2. Conduction Guide Snapshot');
-        doc.moveDown(0.3);
+        drawSectionTitle(doc, '2. Conduction Guide Snapshot');
         doc.fontSize(10).font('Helvetica');
         doc.text(`Objective: ${textOrNA(templateGuide.objective)}`);
 
@@ -161,79 +231,129 @@ async function generateActivityReportPDF(reportData) {
       }
 
       // Rubrics and criteria
-      ensurePageSpace(doc, 120);
-      doc.moveDown();
-      doc.fontSize(12).font('Helvetica-Bold').text('3. Rubrics And Criteria');
-      doc.moveDown(0.4);
+      drawSectionTitle(doc, '3. Rubrics And Criteria');
 
       if (!rubrics.length) {
         doc.fontSize(10).font('Helvetica').text('No rubrics configured for this activity.');
       } else {
         rubrics.forEach((rubric, index) => {
-          ensurePageSpace(doc, 120);
-          doc.fontSize(10).font('Helvetica-Bold').text(`${index + 1}. ${textOrNA(rubric.name)}`);
+          const cardHeight = 108;
+          ensurePageSpace(doc, cardHeight + 10);
+          const x = doc.page.margins.left;
+          const y = doc.y;
+
+          doc.roundedRect(x, y, contentWidth, cardHeight, 5).strokeColor('#D1D5DB').lineWidth(1).stroke();
+          doc.fontSize(10).font('Helvetica-Bold').fillColor('#111827').text(`${index + 1}. ${textOrNA(rubric.name)}`, x + 10, y + 8, {
+            width: contentWidth - 20,
+          });
+
+          doc.y = y + 28;
           doc.font('Helvetica');
-          doc.text(`   1: ${textOrNA(rubric.criteria?.scale1)}`);
-          doc.text(`   2: ${textOrNA(rubric.criteria?.scale2)}`);
-          doc.text(`   3: ${textOrNA(rubric.criteria?.scale3)}`);
-          doc.text(`   4: ${textOrNA(rubric.criteria?.scale4)}`);
-          doc.text(`   5: ${textOrNA(rubric.criteria?.scale5)}`);
-          doc.moveDown(0.35);
+          doc.text(`1: ${textOrNA(rubric.criteria?.scale1)}`, x + 14, doc.y, { width: contentWidth - 28 });
+          doc.text(`2: ${textOrNA(rubric.criteria?.scale2)}`, x + 14, doc.y + 2, { width: contentWidth - 28 });
+          doc.text(`3: ${textOrNA(rubric.criteria?.scale3)}`, x + 14, doc.y + 2, { width: contentWidth - 28 });
+          doc.text(`4: ${textOrNA(rubric.criteria?.scale4)}`, x + 14, doc.y + 2, { width: contentWidth - 28 });
+          doc.text(`5: ${textOrNA(rubric.criteria?.scale5)}`, x + 14, doc.y + 2, { width: contentWidth - 28 });
+          doc.y = y + cardHeight + 6;
         });
       }
 
       // Score summary
-      ensurePageSpace(doc, 110);
-      doc.moveDown();
-      doc.fontSize(12).font('Helvetica-Bold').text('4. Score Summary');
-      doc.moveDown(0.3);
-      doc.fontSize(10).font('Helvetica');
-      doc.text(`Total Students: ${Number(summary.totalStudents) || 0}`);
-      doc.text(`Students With Scores: ${Number(summary.gradedStudents) || 0}`);
-      doc.text(`Average Activity Marks: ${Number(summary.averageMarks || 0).toFixed(2)} / ${Number(activity.totalMarks) || 0}`);
+      drawSectionTitle(doc, '4. Score Summary');
+      drawInfoGrid(doc, [
+        { label: 'Total Students', value: Number(summary.totalStudents) || 0 },
+        { label: 'Students With Scores', value: Number(summary.gradedStudents) || 0 },
+        { label: 'Average Activity Marks', value: `${Number(summary.averageMarks || 0).toFixed(2)} / ${Number(activity.totalMarks) || 0}` },
+        { label: 'Conduction Images Attached', value: Array.isArray(images) ? images.length : 0 },
+      ]);
 
-      // Student-level details
-      ensurePageSpace(doc, 140);
-      doc.moveDown();
-      doc.fontSize(12).font('Helvetica-Bold').text('5. Student-Wise Details');
-      doc.moveDown(0.2);
-
-      const maxRaw = rubrics.length * 5;
+      // Student-level table
+      drawSectionTitle(doc, '5. Student-Wise Details');
       if (!studentRows.length) {
         doc.fontSize(10).font('Helvetica').text('No students found for this class and academic year.');
       } else {
-        studentRows.forEach((row, idx) => {
-          ensurePageSpace(doc, 70);
-          doc.fontSize(10).font('Helvetica-Bold')
-            .text(`${idx + 1}. ${textOrNA(row.rollNo)} - ${textOrNA(row.name)}`);
+        const cols = [
+          { key: 'rollNo', label: 'Roll No', width: 70, align: 'left' },
+          { key: 'name', label: 'Student Name', width: 175, align: 'left' },
+          { key: 'raw', label: 'Raw', width: 80, align: 'right' },
+          { key: 'marks', label: 'Marks', width: 80, align: 'right' },
+          { key: 'status', label: 'Status', width: 90, align: 'center' },
+        ];
 
-          const rubricLine = rubrics
-            .map((r, i) => `R${i + 1}:${row.rubricScores[String(r._id)] ?? '-'}`)
-            .join('  ');
-          doc.font('Helvetica').text(`Scores: ${rubricLine || 'N/A'}`);
-          doc.text(`Raw: ${row.rawTotal}/${maxRaw || 0}    Activity Marks: ${Number(row.activityMarks || 0).toFixed(2)}/${Number(activity.totalMarks) || 0}`);
-          doc.moveDown(0.25);
+        const rowHeight = 20;
+        const drawTableHeader = () => {
+          ensurePageSpace(doc, rowHeight + 4);
+          const x = doc.page.margins.left;
+          const y = doc.y;
+          doc.rect(x, y, contentWidth, rowHeight).fill('#F3F4F6');
+          let currentX = x;
+          cols.forEach((col) => {
+            doc.fillColor('#111827').font('Helvetica-Bold').fontSize(9).text(col.label, currentX + 6, y + 6, {
+              width: col.width - 12,
+              align: col.align,
+            });
+            currentX += col.width;
+          });
+          doc.y = y + rowHeight;
+        };
+
+        drawTableHeader();
+        studentRows.forEach((row, idx) => {
+          if (doc.y + rowHeight > doc.page.height - doc.page.margins.bottom) {
+            doc.addPage();
+            drawSectionTitle(doc, '5. Student-Wise Details (Continued)');
+            drawTableHeader();
+          }
+
+          const x = doc.page.margins.left;
+          const y = doc.y;
+          const even = idx % 2 === 0;
+          doc.rect(x, y, contentWidth, rowHeight).fill(even ? '#FFFFFF' : '#FAFAFA');
+          doc.rect(x, y, contentWidth, rowHeight).strokeColor('#E5E7EB').lineWidth(0.4).stroke();
+
+          const cells = {
+            rollNo: textOrNA(row.rollNo),
+            name: textOrNA(row.name),
+            raw: `${Number(row.rawTotal || 0).toFixed(0)}/${maxRaw || 0}`,
+            marks: `${Number(row.activityMarks || 0).toFixed(2)}/${Number(activity.totalMarks) || 0}`,
+            status: Number(row.rawTotal || 0) > 0 ? 'Scored' : 'Pending',
+          };
+
+          let currentX = x;
+          cols.forEach((col) => {
+            doc.fillColor('#111827').font('Helvetica').fontSize(9).text(cells[col.key], currentX + 6, y + 6, {
+              width: col.width - 12,
+              align: col.align,
+            });
+            currentX += col.width;
+          });
+          doc.y = y + rowHeight;
         });
       }
 
       // Conduction images
       if (Array.isArray(images) && images.length > 0) {
         doc.addPage();
-        doc.fontSize(12).font('Helvetica-Bold').text('6. Activity Conduction Images');
-        doc.moveDown(0.5);
+        drawSectionTitle(doc, '6. Activity Conduction Images');
 
         images.forEach((image, idx) => {
-          ensurePageSpace(doc, 260);
-          doc.fontSize(10).font('Helvetica-Bold').text(`Image ${idx + 1}: ${textOrNA(image.originalname)}`);
-          doc.moveDown(0.2);
+          ensurePageSpace(doc, 280);
+          doc.fontSize(10).font('Helvetica-Bold').fillColor('#111827').text(`Image ${idx + 1}: ${textOrNA(image.originalname)}`);
+          doc.moveDown(0.15);
 
           try {
-            doc.image(image.buffer, {
-              fit: [500, 220],
+            const imageX = doc.page.margins.left;
+            const imageY = doc.y;
+            const imageWidth = contentWidth;
+            const frameHeight = 224;
+
+            doc.roundedRect(imageX, imageY, imageWidth, frameHeight, 4).strokeColor('#D1D5DB').lineWidth(1).stroke();
+            doc.image(image.buffer, imageX, imageY, {
+              fit: [imageWidth - 8, frameHeight - 8],
               align: 'center',
               valign: 'center',
             });
-            doc.moveDown(0.5);
+            doc.y = imageY + frameHeight + 6;
           } catch {
             doc.fontSize(9).font('Helvetica').text('Could not render this image in PDF.');
             doc.moveDown(0.4);
@@ -241,10 +361,11 @@ async function generateActivityReportPDF(reportData) {
         });
       }
 
-      // Footer
-      doc.moveDown();
-      doc.fontSize(8).font('Helvetica')
+      drawSectionTitle(doc, '7. Generation Metadata');
+      doc.fontSize(9).font('Helvetica')
         .text(`Generated by: ${textOrNA(reportData.generatedBy)} on ${formatDate(new Date())}`, { align: 'center' });
+
+      addPageNumbers(doc);
 
       doc.end();
     } catch (err) {

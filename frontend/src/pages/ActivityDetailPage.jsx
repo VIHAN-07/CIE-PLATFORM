@@ -112,16 +112,30 @@ export default function ActivityDetailPage() {
       const formData = new FormData();
       reportImages.forEach((file) => formData.append('images', file));
 
-      const response = await api.post(`/exports/activity/${id}/report-pdf`, formData, {
-        responseType: 'blob',
+      const token = localStorage.getItem('token');
+      const response = await fetch(`/api/exports/activity/${id}/report-pdf`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
       });
 
-      const contentDisposition = response.headers['content-disposition'] || '';
+      if (!response.ok) {
+        let message = 'Failed to generate report';
+        try {
+          const errBody = await response.json();
+          message = errBody?.message || message;
+        } catch {
+          // Ignore parse errors for non-JSON error bodies
+        }
+        throw new Error(message);
+      }
+
+      const contentDisposition = response.headers.get('content-disposition') || '';
       const match = contentDisposition.match(/filename="?([^\"]+)"?/i);
       const fallbackName = `${(activity.name || 'Activity').replace(/[^a-zA-Z0-9-_]/g, '_')}_Activity_Report.pdf`;
       const filename = match?.[1] || fallbackName;
 
-      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -134,7 +148,7 @@ export default function ActivityDetailPage() {
       setShowReportModal(false);
       toast.success('Activity report downloaded');
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to generate report');
+      toast.error(err.message || 'Failed to generate report');
     } finally {
       setReportLoading(false);
     }
