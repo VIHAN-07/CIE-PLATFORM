@@ -26,7 +26,12 @@ exports.exportSubjectExcel = async (req, res, next) => {
     const results = await FinalSubjectResult.find({ subject: subject._id });
 
     const workbook = await generateResultsExcel(
-      subject.name,
+      {
+        subjectName: subject.name,
+        subjectCode: subject.code,
+        className: subject.class?.name || 'N/A',
+        academicYearName: subject.academicYear?.name || 'N/A',
+      },
       activities,
       results,
       students

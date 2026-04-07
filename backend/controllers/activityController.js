@@ -25,7 +25,14 @@ exports.getAll = async (req, res, next) => {
     }
 
     const activities = await Activity.find(filter)
-      .populate('subject', 'name code')
+      .populate({
+        path: 'subject',
+        select: 'name code class academicYear',
+        populate: [
+          { path: 'class', select: 'name' },
+          { path: 'academicYear', select: 'name' },
+        ],
+      })
       .populate('faculty', 'name email')
       .sort('-createdAt');
     res.json(activities);
@@ -38,7 +45,14 @@ exports.getAll = async (req, res, next) => {
 exports.getById = async (req, res, next) => {
   try {
     const activity = await Activity.findById(req.params.id)
-      .populate('subject', 'name code')
+      .populate({
+        path: 'subject',
+        select: 'name code class academicYear',
+        populate: [
+          { path: 'class', select: 'name' },
+          { path: 'academicYear', select: 'name' },
+        ],
+      })
       .populate('faculty', 'name email');
     if (!activity) return res.status(404).json({ success: false, message: 'Activity not found.' });
 
@@ -59,11 +73,18 @@ exports.create = async (req, res, next) => {
     const { name, activityType, subjectName, classId, academicYearId, totalMarks, topic, guidelines, videoUrl } = req.body;
 
     // Find or create subject by name for this faculty/class/year
-    let subjectDoc = await Subject.findOne({
+    const subjectFilter = {
       name: { $regex: new RegExp(`^${subjectName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
       class: classId,
       academicYear: academicYearId,
-    });
+    };
+
+    // Keep faculty ownership consistent so dashboard subject/activity lists stay in sync.
+    if (req.user.role === 'faculty') {
+      subjectFilter.faculty = req.user._id;
+    }
+
+    let subjectDoc = await Subject.findOne(subjectFilter);
 
     if (!subjectDoc) {
       // Auto-create subject with a generated code

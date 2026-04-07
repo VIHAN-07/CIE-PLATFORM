@@ -53,11 +53,40 @@ export default function DashboardPage() {
         setStats(data);
       }
       const { data: subData } = await api.get(`/subjects?academicYear=${selectedYear}`);
-      setSubjects(subData);
       const { data: actData } = await api.get('/activities');
-      // Filter activities to only those belonging to subjects in this year
-      const subjectIds = new Set(subData.map((s) => s._id));
-      const filtered = actData.filter((a) => subjectIds.has(a.subject?._id || a.subject));
+      // Prefer subject-based filtering, but fall back to activity.subject.academicYear
+      // so newly created activities still appear even if subject ownership differs.
+      const subjectIds = new Set(subData.map((s) => String(s._id)));
+      const filtered = actData.filter((a) => {
+        const subjectId = String(a.subject?._id || a.subject || '');
+        if (subjectIds.size > 0 && subjectId) return subjectIds.has(subjectId);
+
+        const activityYearId = String(a.subject?.academicYear?._id || a.subject?.academicYear || '');
+        return activityYearId === String(selectedYear);
+      });
+
+      let resolvedSubjects = subData;
+      if (resolvedSubjects.length === 0 && filtered.length > 0) {
+        const subjectMap = new Map();
+        filtered.forEach((activity) => {
+          const subj = activity.subject;
+          if (!subj) return;
+
+          const subjectId = String(subj._id || '');
+          if (!subjectId || subjectMap.has(subjectId)) return;
+
+          subjectMap.set(subjectId, {
+            _id: subjectId,
+            name: subj.name,
+            code: subj.code,
+            class: subj.class,
+            faculty: activity.faculty,
+          });
+        });
+        resolvedSubjects = Array.from(subjectMap.values());
+      }
+
+      setSubjects(resolvedSubjects);
       setActivities(filtered.slice(0, 10));
     } catch (err) {
       console.error(err);
@@ -100,10 +129,9 @@ export default function DashboardPage() {
           ) : (
             <div className="space-y-2">
               {subjects.map((s) => (
-                <Link
+                <div
                   key={s._id}
-                  to={`/results/${s._id}`}
-                  className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition border border-gray-50"
+                  className="flex items-center justify-between p-3 rounded-lg border border-gray-50"
                 >
                   <div>
                     <p className="font-medium text-gray-900">{s.name}</p>
@@ -112,7 +140,7 @@ export default function DashboardPage() {
                   <span className="text-xs bg-primary-100 text-primary-700 px-2 py-1 rounded-full">
                     {s.faculty?.name}
                   </span>
-                </Link>
+                </div>
               ))}
             </div>
           )}

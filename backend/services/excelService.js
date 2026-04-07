@@ -44,12 +44,20 @@ async function parseStudentExcel(buffer) {
  * Generate subject results Excel workbook.
  * Columns: Roll No, Name, [Activity scores], Raw Total, Final Out Of 15
  */
-async function generateResultsExcel(subjectName, activities, results, students) {
+async function generateResultsExcel(meta, activities, results, students) {
+  const {
+    subjectName,
+    subjectCode = '',
+    className = 'N/A',
+    academicYearName = 'N/A',
+  } = meta || {};
+
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'PICT CIE Platform';
   workbook.created = new Date();
 
   const sheet = workbook.addWorksheet(subjectName.substring(0, 31));
+  const tableHeaderRowIndex = 6;
 
   // Build columns
   const columns = [
@@ -72,9 +80,29 @@ async function generateResultsExcel(subjectName, activities, results, students) 
   );
 
   sheet.columns = columns;
+  // ExcelJS writes headers to row 1 automatically when setting columns; remove it so metadata rows can occupy the top.
+  sheet.spliceRows(1, 1);
+
+  // Report metadata shown at top of export
+  sheet.mergeCells('A1:D1');
+  sheet.getCell('A1').value = `Subject: ${subjectName}${subjectCode ? ` (${subjectCode})` : ''}`;
+  sheet.getCell('A1').font = { bold: true, size: 13 };
+
+  sheet.mergeCells('A2:D2');
+  sheet.getCell('A2').value = `Class: ${className}`;
+  sheet.getCell('A2').font = { bold: true, size: 11 };
+
+  sheet.mergeCells('A3:D3');
+  sheet.getCell('A3').value = `Academic Year: ${academicYearName}`;
+  sheet.getCell('A3').font = { bold: true, size: 11 };
+
+  sheet.mergeCells('A4:D4');
+  sheet.getCell('A4').value = `Exported On: ${new Date().toLocaleString()}`;
+  sheet.getCell('A4').font = { italic: true, size: 10 };
 
   // Style header
-  const headerRow = sheet.getRow(1);
+  const headerRow = sheet.getRow(tableHeaderRowIndex);
+  headerRow.values = columns.map((col) => col.header);
   headerRow.font = { bold: true, size: 11 };
   headerRow.fill = {
     type: 'pattern',
@@ -110,8 +138,8 @@ async function generateResultsExcel(subjectName, activities, results, students) 
 
   // Auto-filter
   sheet.autoFilter = {
-    from: 'A1',
-    to: { row: 1, column: columns.length },
+    from: { row: tableHeaderRowIndex, column: 1 },
+    to: { row: tableHeaderRowIndex, column: columns.length },
   };
 
   return workbook;

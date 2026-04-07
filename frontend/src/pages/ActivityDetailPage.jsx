@@ -109,7 +109,7 @@ export default function ActivityDetailPage() {
         <div>
           <h1 className="text-2xl font-bold">{activity.name}</h1>
           <p className="text-gray-500 mt-1">
-            {activity.activityType} • {activity.subject?.name} ({activity.subject?.code}) • {activity.totalMarks} marks
+            {activity.activityType} • {activity.subject?.name} ({activity.subject?.code}) • Class: {activity.subject?.class?.name || 'N/A'} • {activity.totalMarks} marks
           </p>
         </div>
         <div className="flex items-center gap-2">

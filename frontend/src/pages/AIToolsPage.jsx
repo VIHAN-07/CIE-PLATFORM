@@ -1,5 +1,5 @@
 // ==========================================
-// AI Tools Page — All 5 AI features
+// AI Tools Page — Rubrics, Guidelines, Insights
 // ==========================================
 
 import { useState, useEffect } from 'react';
@@ -385,10 +385,6 @@ export default function AIToolsPage() {
   const [rubricResult, setRubricResult] = useState(null);
   const [guidelinesResult, setGuidelinesResult] = useState('');
   const [insightsResult, setInsightsResult] = useState(null);
-  const [reportResult, setReportResult] = useState(null);
-  const [feedbackResult, setFeedbackResult] = useState(null);
-  const [students, setStudents] = useState([]);
-  const [selectedStudent, setSelectedStudent] = useState('');
   const [loading, setLoading] = useState(false);
 
   // Form fields
@@ -409,37 +405,40 @@ export default function AIToolsPage() {
   };
 
   useEffect(() => {
-    api.get('/subjects').then((r) => setSubjects(r.data));
+    api.get('/subjects').then((r) => {
+      const list = r.data || [];
+      setSubjects(list);
+      if (list.length && !selectedSubject) {
+        setSelectedSubject(list[0]._id);
+      }
+    });
   }, []);
 
   useEffect(() => {
-    if (selectedSubject) {
-      api.get(`/activities?subject=${selectedSubject}`).then((r) => {
-        setActivities(r.data);
-        if (r.data.length) setSelectedActivity(r.data[0]._id);
-      });
-    }
-  }, [selectedSubject]);
+    const endpoint = selectedSubject
+      ? `/activities?subject=${selectedSubject}`
+      : '/activities';
 
-  // Load students when an activity is selected (for feedback tab)
-  useEffect(() => {
-    if (selectedActivity && activeTab === 'feedback') {
-      const act = activities.find((a) => a._id === selectedActivity);
-      if (act) {
-        api.get(`/students?class=${act.class}&academicYear=${act.academicYear}`).then((r) => {
-          setStudents(r.data);
-          if (r.data.length) setSelectedStudent(r.data[0]._id);
-        }).catch(() => setStudents([]));
+    api.get(endpoint).then((r) => {
+      const list = r.data || [];
+      setActivities(list);
+
+      if (list.length === 0) {
+        setSelectedActivity('');
+        return;
       }
-    }
-  }, [selectedActivity, activeTab]);
+
+      const selectedStillExists = list.some((a) => a._id === selectedActivity);
+      if (!selectedStillExists) {
+        setSelectedActivity(list[0]._id);
+      }
+    });
+  }, [selectedSubject]);
 
   const tabs = [
     { id: 'rubrics', label: '✨ Rubric Generator' },
     { id: 'guidelines', label: '📋 Guidelines' },
     { id: 'insights', label: '📊 Class Insights' },
-    { id: 'report', label: '📄 NAAC/NBA Report' },
-    { id: 'feedback', label: '🎯 Student Feedback' },
   ];
 
   // ---- 1. Generate Rubrics ----
@@ -480,40 +479,6 @@ export default function AIToolsPage() {
       const { data } = await api.post('/ai/class-insights', { activityId: selectedActivity });
       setInsightsResult(data);
       toast.success('Insights generated!');
-    } catch (err) {
-      toast.error(getAiErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ---- 4. NAAC Report ----
-  const handleNAACReport = async () => {
-    if (!selectedSubject) return toast.error('Select a subject');
-    setLoading(true);
-    try {
-      const { data } = await api.post('/ai/naac-report', { subjectId: selectedSubject, reportType: 'NAAC' });
-      setReportResult(data.report);
-      toast.success('Report generated!');
-    } catch (err) {
-      toast.error(getAiErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ---- 5. Student Feedback ----
-  const handleStudentFeedback = async () => {
-    if (!selectedActivity) return toast.error('Select an activity');
-    if (!selectedStudent) return toast.error('Select a student');
-    setLoading(true);
-    try {
-      const { data } = await api.post('/ai/student-feedback', {
-        activityId: selectedActivity,
-        studentId: selectedStudent,
-      });
-      setFeedbackResult(data);
-      toast.success('Feedback generated!');
     } catch (err) {
       toast.error(getAiErrorMessage(err));
     } finally {
@@ -651,17 +616,23 @@ export default function AIToolsPage() {
               <div>
                 <label className="label">Subject</label>
                 <select value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value)} className="input">
-                  <option value="">Select Subject</option>
+                  <option value="">All Subjects</option>
                   {subjects.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
                 </select>
               </div>
               <div>
                 <label className="label">Activity</label>
                 <select value={selectedActivity} onChange={(e) => setSelectedActivity(e.target.value)} className="input">
+                  <option value="">Select Activity</option>
                   {activities.map((a) => <option key={a._id} value={a._id}>{a.name}</option>)}
                 </select>
               </div>
             </div>
+
+            {activities.length === 0 && (
+              <p className="text-sm text-gray-500 mb-4">No activities found for the selected subject.</p>
+            )}
+
             <button onClick={handleClassInsights} disabled={loading} className="btn-primary">
               {loading ? '⏳ Analyzing...' : '📊 Generate Insights'}
             </button>
@@ -694,102 +665,6 @@ export default function AIToolsPage() {
           </div>
         )}
 
-        {/* NAAC/NBA Report */}
-        {activeTab === 'report' && (
-          <div>
-            <h2 className="text-lg font-semibold mb-4">NAAC/NBA Report Generator</h2>
-            <div className="mb-4">
-              <label className="label">Subject</label>
-              <select value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value)} className="input w-80">
-                <option value="">Select Subject</option>
-                {subjects.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
-              </select>
-            </div>
-            <button onClick={handleNAACReport} disabled={loading} className="btn-primary">
-              {loading ? '⏳ Generating Report...' : '📄 Generate NAAC Report'}
-            </button>
-
-            {reportResult && (
-              <div className="mt-6 space-y-4">
-                {['activitiesConducted', 'rubrics', 'evaluationMethod', 'scoreDistribution',
-                  'observations', 'weaknessAnalysis', 'improvementActions', 'outcomeNarrative'].map((key) => (
-                  reportResult.content?.[key] && (
-                    <div key={key} className="border-l-4 border-primary-500 pl-4">
-                      <h3 className="font-semibold capitalize text-gray-800 mb-1">
-                        {key.replace(/([A-Z])/g, ' $1').trim()}
-                      </h3>
-                      <p className="text-sm text-gray-600 whitespace-pre-wrap">{reportResult.content[key]}</p>
-                    </div>
-                  )
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Student Feedback */}
-        {activeTab === 'feedback' && (
-          <div>
-            <h2 className="text-lg font-semibold mb-4">AI Student Feedback</h2>
-            <p className="text-sm text-gray-500 mb-4">Generate personalized AI feedback for a student based on their scores in an activity.</p>
-            <div className="grid grid-cols-3 gap-4 mb-4">
-              <div>
-                <label className="label">Subject</label>
-                <select value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value)} className="input">
-                  <option value="">Select Subject</option>
-                  {subjects.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="label">Activity</label>
-                <select value={selectedActivity} onChange={(e) => setSelectedActivity(e.target.value)} className="input">
-                  <option value="">Select Activity</option>
-                  {activities.map((a) => <option key={a._id} value={a._id}>{a.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="label">Student</label>
-                <select value={selectedStudent} onChange={(e) => setSelectedStudent(e.target.value)} className="input">
-                  <option value="">Select Student</option>
-                  {students.map((s) => <option key={s._id} value={s._id}>{s.name} ({s.rollNo})</option>)}
-                </select>
-              </div>
-            </div>
-            <button onClick={handleStudentFeedback} disabled={loading} className="btn-primary">
-              {loading ? '⏳ Generating Feedback...' : '🎯 Generate Feedback'}
-            </button>
-
-            {feedbackResult && (
-              <div className="mt-6 space-y-4">
-                {feedbackResult.feedback && (
-                  <div className="bg-green-50 rounded-lg p-6 prose prose-sm max-w-none
-                    prose-headings:text-gray-900 prose-headings:font-bold
-                    prose-p:text-gray-700 prose-p:leading-relaxed
-                    prose-ul:my-2 prose-li:my-0.5 prose-li:text-gray-700">
-                    <h3 className="text-green-900 font-semibold mb-2">AI Feedback</h3>
-                    <ReactMarkdown>{feedbackResult.feedback}</ReactMarkdown>
-                  </div>
-                )}
-                {feedbackResult.scores && (
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <h3 className="font-medium text-gray-700 mb-2">Score Breakdown</h3>
-                    <div className="space-y-2">
-                      {feedbackResult.scores.map((s, i) => (
-                        <div key={i} className="flex items-center gap-3 text-sm">
-                          <span className="font-medium w-40">{s.rubricName || s.rubric}</span>
-                          <div className="flex-1 bg-gray-200 rounded-full h-2">
-                            <div className="bg-primary-500 rounded-full h-2" style={{ width: `${(s.value / 5) * 100}%` }}></div>
-                          </div>
-                          <span className="text-gray-600 w-10 text-right">{s.value}/5</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
       </div>
     </div>
   );

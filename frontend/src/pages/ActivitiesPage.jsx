@@ -206,6 +206,11 @@ export default function ActivitiesPage() {
                     <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
                       {a.subject?.code || a.subject?.name}
                     </span>
+                    {a.subject?.class?.name && (
+                      <span className="text-xs bg-indigo-50 text-indigo-700 px-2 py-1 rounded">
+                        Class: {a.subject.class.name}
+                      </span>
+                    )}
                     {isAdmin && a.faculty && (
                       <span className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded">
                         {a.faculty.name}
