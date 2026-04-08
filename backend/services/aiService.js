@@ -225,6 +225,9 @@ Return JSON:
   "insights": "Overall narrative summary...",
   "weakAreas": [
     { "rubricName": "...", "avgScore": X.XX, "suggestion": "..." }
+  ],
+  "strongAreas": [
+    { "rubricName": "...", "avgScore": X.XX, "suggestion": "..." }
   ]
 }
 Return ONLY valid JSON.`;
@@ -235,6 +238,11 @@ Return ONLY valid JSON.`;
     weakAreas: rubricAverages.filter((r) => r.avgScore < 3.0).map((r) => ({
       rubricName: r.rubricName, avgScore: r.avgScore,
       suggestion: `Focus on improving ${r.rubricName} through targeted practice.`,
+    })),
+    strongAreas: rubricAverages.filter((r) => r.avgScore >= 4.0).map((r) => ({
+      rubricName: r.rubricName,
+      avgScore: r.avgScore,
+      suggestion: `Maintain and reinforce this strength in ${r.rubricName} through advanced practice.`,
     })),
   };
   return parseJSON(raw, validateInsightsObject, fallback);
@@ -318,7 +326,10 @@ function validateRubricArray(data) {
 }
 
 function validateInsightsObject(data) {
-  return data && typeof data.insights === 'string' && Array.isArray(data.weakAreas);
+  return data
+    && typeof data.insights === 'string'
+    && Array.isArray(data.weakAreas)
+    && (typeof data.strongAreas === 'undefined' || Array.isArray(data.strongAreas));
 }
 
 function validateReportObject(data) {

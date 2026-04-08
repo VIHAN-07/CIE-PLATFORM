@@ -4,6 +4,7 @@
 
 const ActivityTemplate = require('../models/ActivityTemplate');
 const Activity = require('../models/Activity');
+const audit = require('../services/auditService');
 
 function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -156,6 +157,26 @@ exports.getGuideByActivityType = async (req, res, next) => {
         updatedAt: template.guideLastUpdatedAt || template.updatedAt,
       },
     });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/** POST /api/learning/guides/view */
+exports.markGuideView = async (req, res, next) => {
+  try {
+    const rawType = typeof req.body?.activityType === 'string' ? req.body.activityType.trim() : '';
+
+    audit.log({
+      req,
+      action: 'LEARNING_GUIDE_VIEW',
+      entityType: 'System',
+      entityId: null,
+      description: rawType ? `Learning guide viewed: ${rawType}` : 'Learning guide viewed',
+      newValue: rawType ? { activityType: rawType } : undefined,
+    });
+
+    res.json({ success: true });
   } catch (err) {
     next(err);
   }

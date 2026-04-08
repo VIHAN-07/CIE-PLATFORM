@@ -13,6 +13,112 @@ const { recomputeSubjectResults } = require('../services/scoringEngine');
 const logger = require('../services/logger');
 const DEFAULT_RUBRICS = require('../config/defaultRubrics');
 
+const SEMESTER_TOTAL_CIE_MARKS = 15;
+
+function roundMarks(value) {
+  return Math.round((Number(value) || 0) * 100) / 100;
+}
+
+function escapeRegex(value) {
+  return `${value || ''}`.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function normalizeActivityTitle(value) {
+  return `${value || ''}`.trim().replace(/\s+/g, ' ');
+}
+
+async function findDuplicateActivityTitle(name, facultyId, excludeActivityId = null) {
+  const normalized = normalizeActivityTitle(name);
+  if (!normalized) return null;
+
+  const filter = {
+    faculty: facultyId,
+    name: { $regex: new RegExp(`^${escapeRegex(normalized)}$`, 'i') },
+  };
+
+  if (excludeActivityId) {
+    filter._id = { $ne: excludeActivityId };
+  }
+
+  return Activity.findOne(filter).select('_id name').lean();
+}
+
+async function suggestNextActivityTitle(name, facultyId, excludeActivityId = null) {
+  const normalized = normalizeActivityTitle(name) || 'CIE';
+  const filter = {
+    faculty: facultyId,
+    name: { $regex: new RegExp(`^${escapeRegex(normalized)}(?:\\s+(\\d+))?$`, 'i') },
+  };
+
+  if (excludeActivityId) {
+    filter._id = { $ne: excludeActivityId };
+  }
+
+  const existing = await Activity.find(filter).select('name').lean();
+  let maxSuffix = 1;
+
+  existing.forEach((row) => {
+    const candidate = normalizeActivityTitle(row?.name);
+    const match = candidate.match(new RegExp(`^${escapeRegex(normalized)}(?:\\s+(\\d+))?$`, 'i'));
+    if (!match) return;
+    const parsed = Number(match[1]);
+    if (Number.isFinite(parsed) && parsed > maxSuffix) {
+      maxSuffix = parsed;
+    }
+  });
+
+  return `${normalized} ${maxSuffix + 1}`;
+}
+
+function getSubjectCodeBase(subjectName) {
+  const sanitized = `${subjectName || ''}`.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  return (sanitized || 'SUBJ').slice(0, 12);
+}
+
+async function generateUniqueSubjectCode(subjectName, classId, academicYearId) {
+  const base = getSubjectCodeBase(subjectName);
+  const existing = await Subject.find({
+    class: classId,
+    academicYear: academicYearId,
+    code: { $regex: new RegExp(`^${escapeRegex(base)}\\d*$`, 'i') },
+  }).select('code').lean();
+
+  const existingSet = new Set(existing.map((row) => `${row.code || ''}`.toUpperCase()));
+  if (!existingSet.has(base)) return base;
+
+  let counter = 2;
+  while (counter < 1000) {
+    const candidate = `${base}${counter}`.slice(0, 20);
+    if (!existingSet.has(candidate)) return candidate;
+    counter += 1;
+  }
+
+  return `${base}${Date.now().toString().slice(-4)}`.slice(0, 20);
+}
+
+async function getSubjectMarksSummary(subjectId, excludeActivityId = null) {
+  const match = { subject: subjectId };
+  if (excludeActivityId) {
+    match._id = { $ne: excludeActivityId };
+  }
+
+  const [summary] = await Activity.aggregate([
+    { $match: match },
+    {
+      $group: {
+        _id: null,
+        totalMarks: { $sum: '$totalMarks' },
+        activityCount: { $sum: 1 },
+      },
+    },
+  ]);
+
+  return {
+    totalMarks: roundMarks(summary?.totalMarks || 0),
+    activityCount: Number(summary?.activityCount || 0),
+  };
+}
+
 /** GET /api/activities */
 exports.getAll = async (req, res, next) => {
   try {
@@ -71,6 +177,18 @@ exports.getById = async (req, res, next) => {
 exports.create = async (req, res, next) => {
   try {
     const { name, activityType, subjectName, classId, academicYearId, totalMarks, topic, guidelines, videoUrl } = req.body;
+    const normalizedName = normalizeActivityTitle(name);
+
+    const existingByTitle = await findDuplicateActivityTitle(normalizedName, req.user._id);
+    if (existingByTitle) {
+      const suggestedName = await suggestNextActivityTitle(normalizedName, req.user._id);
+      return res.status(409).json({
+        success: false,
+        code: 'ACTIVITY_NAME_DUPLICATE',
+        message: `An activity titled "${normalizedName}" already exists. Please use a different title.`,
+        suggestedName,
+      });
+    }
 
     // Find or create subject by name for this faculty/class/year
     const subjectFilter = {
@@ -87,8 +205,8 @@ exports.create = async (req, res, next) => {
     let subjectDoc = await Subject.findOne(subjectFilter);
 
     if (!subjectDoc) {
-      // Auto-create subject with a generated code
-      const code = subjectName.replace(/[^A-Za-z0-9]/g, '').substring(0, 8).toUpperCase() || 'SUBJ';
+      // Auto-create subject with a generated unique code for this class+academicYear.
+      const code = await generateUniqueSubjectCode(subjectName, classId, academicYearId);
       subjectDoc = await Subject.create({
         name: subjectName,
         code,
@@ -98,13 +216,28 @@ exports.create = async (req, res, next) => {
       });
     }
 
+    const requestedMarks = roundMarks(totalMarks);
+    const existingSummary = await getSubjectMarksSummary(subjectDoc._id);
+    const allowedRemaining = roundMarks(Math.max(SEMESTER_TOTAL_CIE_MARKS - existingSummary.totalMarks, 0));
+
+    if (requestedMarks > allowedRemaining + 1e-9) {
+      return res.status(400).json({
+        success: false,
+        message: `This subject already has ${existingSummary.totalMarks}/15 CIE marks. You can add up to ${allowedRemaining} more marks in this semester.`,
+        limit: SEMESTER_TOTAL_CIE_MARKS,
+        existingTotal: existingSummary.totalMarks,
+        requestedMarks,
+        remainingAllowed: allowedRemaining,
+      });
+    }
+
     // Load template once to inherit defaults (rubrics + optional guide video)
     const template = await ActivityTemplate.findOne({ activityType });
     const inheritedVideoUrl = `${template?.learningGuide?.videoUrl || ''}`.trim();
     const resolvedVideoUrl = `${videoUrl || ''}`.trim() || inheritedVideoUrl;
 
     const activity = await Activity.create({
-      name,
+      name: normalizedName,
       activityType,
       subject: subjectDoc._id,
       faculty: req.user._id,
@@ -137,8 +270,8 @@ exports.create = async (req, res, next) => {
       action: 'ACTIVITY_CREATE',
       entityType: 'Activity',
       entityId: activity._id,
-      description: `Activity created: ${name} (${activityType})`,
-      newValue: { name, activityType, subject: subjectDoc._id, totalMarks },
+      description: `Activity created: ${normalizedName} (${activityType})`,
+      newValue: { name: normalizedName, activityType, subject: subjectDoc._id, totalMarks },
     });
 
     res.status(201).json(activity);
@@ -163,6 +296,43 @@ exports.update = async (req, res, next) => {
 
     const previousTotalMarks = activity.totalMarks;
     const previousState = activity.toObject();
+
+    if (typeof req.body.name === 'string') {
+      const normalizedName = normalizeActivityTitle(req.body.name);
+      const duplicate = await findDuplicateActivityTitle(normalizedName, activity.faculty, activity._id);
+
+      if (duplicate) {
+        const suggestedName = await suggestNextActivityTitle(normalizedName, activity.faculty, activity._id);
+        return res.status(409).json({
+          success: false,
+          code: 'ACTIVITY_NAME_DUPLICATE',
+          message: `An activity titled "${normalizedName}" already exists. Please use a different title.`,
+          suggestedName,
+        });
+      }
+
+      req.body.name = normalizedName;
+    }
+
+    if (typeof req.body.totalMarks !== 'undefined') {
+      const requestedMarks = roundMarks(req.body.totalMarks);
+      if (Math.abs(requestedMarks - roundMarks(previousTotalMarks)) > 1e-9) {
+        const existingSummary = await getSubjectMarksSummary(activity.subject, activity._id);
+        const projectedTotal = roundMarks(existingSummary.totalMarks + requestedMarks);
+
+        if (projectedTotal > SEMESTER_TOTAL_CIE_MARKS + 1e-9) {
+          const allowedRemaining = roundMarks(Math.max(SEMESTER_TOTAL_CIE_MARKS - existingSummary.totalMarks, 0));
+          return res.status(400).json({
+            success: false,
+            message: `Updating to ${requestedMarks} exceeds the 15-mark CIE semester cap. Maximum allowed for this activity is ${allowedRemaining}.`,
+            limit: SEMESTER_TOTAL_CIE_MARKS,
+            existingTotalExcludingCurrent: existingSummary.totalMarks,
+            requestedMarks,
+            maximumAllowedForThisActivity: allowedRemaining,
+          });
+        }
+      }
+    }
 
     const updated = await Activity.findByIdAndUpdate(req.params.id, req.body, {
       new: true,

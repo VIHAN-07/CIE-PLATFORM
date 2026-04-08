@@ -29,6 +29,7 @@ exports.getById = async (req, res, next) => {
 exports.create = async (req, res, next) => {
   try {
     const { name, startDate, endDate } = req.body;
+
     const year = await AcademicYear.create({ name, startDate, endDate });
     res.status(201).json(year);
   } catch (err) {

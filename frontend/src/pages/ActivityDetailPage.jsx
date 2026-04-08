@@ -158,16 +158,29 @@ export default function ActivityDetailPage() {
   if (!activity) return null;
 
   const activityVideoEmbedUrl = getYouTubeEmbedUrl(activity.videoUrl || learningGuide?.videoUrl || '');
+  const learningCenterLink = `/learning?activityType=${encodeURIComponent(activity.activityType || '')}`;
+
+  const handleOpenMatchingGuide = async () => {
+    try {
+      await api.post('/learning/guides/view', { activityType: activity.activityType || '' });
+    } catch {
+      // Non-blocking analytics event.
+    }
+  };
 
   return (
-    <div>
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between mb-6">
+      <div className="panel-card-strong flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold">{activity.name}</h1>
-          <p className="text-gray-500 mt-1">
+          <p className="text-xs uppercase tracking-[0.2em] text-sky-700/80 font-semibold">Activity Workspace</p>
+          <h1 className="text-2xl font-bold text-slate-900 mt-1">{activity.name}</h1>
+          <p className="text-slate-600 mt-1">
             {activity.activityType} • {activity.subject?.name} ({activity.subject?.code}) • Class: {activity.subject?.class?.name || 'N/A'} • {activity.totalMarks} marks
           </p>
+          {activity.topic && (
+            <p className="text-slate-600 mt-1">Topic: {activity.topic}</p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <span className={`px-3 py-1 rounded-full text-sm font-medium ${
@@ -181,8 +194,9 @@ export default function ActivityDetailPage() {
       </div>
 
       {/* Action buttons */}
-      <div className="flex flex-wrap gap-3 mb-6">
+      <div className="panel-card flex flex-wrap gap-3">
         <Link to={`/grading/${activity._id}`} className="btn-primary">📝 Open Grading Grid</Link>
+        <Link to={learningCenterLink} onClick={handleOpenMatchingGuide} className="btn-secondary">📘 Open Matching Guide</Link>
         <button onClick={handleOpenReportModal} className="btn-secondary">📄 Generate Activity Report</button>
         {activity.activityType === 'Quiz' && (
           <>
@@ -213,13 +227,13 @@ export default function ActivityDetailPage() {
       </div>
 
       {/* Conduction Guidelines */}
-      <div className="mb-6">
+      <div>
         <ConductionGuidelines activityType={activity.activityType} collapsible guideData={learningGuide} showVideo={false} />
       </div>
 
       {activityVideoEmbedUrl && (
-        <div className="bg-white rounded-xl border p-5 mb-6">
-          <h3 className="font-semibold text-gray-900 mb-3">Reference Video</h3>
+        <div className="panel-card">
+          <h3 className="font-semibold text-slate-900 mb-3">Reference Video</h3>
           <div className="aspect-video w-full overflow-hidden rounded-lg border bg-black">
             <iframe
               src={activityVideoEmbedUrl}
@@ -236,17 +250,18 @@ export default function ActivityDetailPage() {
 
       {/* Custom Guidelines */}
       {activity.guidelines && (
-        <div className="bg-blue-50 rounded-xl p-5 mb-6">
-          <h3 className="font-semibold text-blue-900 mb-2">📋 Guidelines</h3>
-          <pre className="text-sm text-blue-800 whitespace-pre-wrap">{activity.guidelines}</pre>
+        <div className="rounded-2xl border border-sky-200 bg-sky-50 p-5">
+          <h3 className="font-semibold text-sky-900 mb-2">📋 Guidelines</h3>
+          <pre className="text-sm text-sky-800 whitespace-pre-wrap">{activity.guidelines}</pre>
         </div>
       )}
 
       {/* Rubric Editor */}
-      <div className="bg-white rounded-xl shadow-sm border p-6">
-        <h2 className="text-lg font-semibold mb-4">Rubrics ({rubrics.length})</h2>
+      <div className="panel-card">
+        <h2 className="text-lg font-semibold text-slate-900 mb-4">Rubrics ({rubrics.length})</h2>
         <RubricEditor
           activityId={id}
+          activityType={activity.activityType}
           rubrics={rubrics}
           isLocked={activity.status !== 'draft'}
           onRefresh={load}
@@ -260,7 +275,7 @@ export default function ActivityDetailPage() {
         wide
       >
         <div className="space-y-4">
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-slate-600">
             Add optional conduction images. The report will include activity metadata, guidelines, rubrics, scores, and the selected images.
           </p>
 
@@ -276,13 +291,13 @@ export default function ActivityDetailPage() {
                 setReportImages(files.slice(0, 8));
               }}
             />
-            <p className="text-xs text-gray-500 mt-1">Up to 8 images (JPG/PNG).</p>
+            <p className="text-xs text-slate-500 mt-1">Up to 8 images (JPG/PNG).</p>
           </div>
 
           {reportImages.length > 0 && (
-            <div className="border rounded-lg p-3 bg-gray-50">
+            <div className="border border-slate-200 rounded-xl p-3 bg-slate-50">
               <p className="text-sm font-medium mb-2">Selected Files</p>
-              <ul className="text-sm text-gray-700 space-y-1">
+              <ul className="text-sm text-slate-700 space-y-1">
                 {reportImages.map((file, idx) => (
                   <li key={`${file.name}-${idx}`}>• {file.name}</li>
                 ))}

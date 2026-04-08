@@ -30,7 +30,7 @@ const activitySchema = new mongoose.Schema(
     totalMarks: {
       type: Number,
       required: [true, 'Total marks is required'],
-      min: 1,
+      min: 0.5,
     },
     topic: {
       type: String,

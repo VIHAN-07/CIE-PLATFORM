@@ -64,6 +64,8 @@ const auditLogSchema = new mongoose.Schema(
         'AI_GENERATE_FEEDBACK',
         'AI_GENERATE_INSIGHTS',
         'AI_GENERATE_REPORT',
+        // Learning operations
+        'LEARNING_GUIDE_VIEW',
         // System
         'PASSWORD_CHANGE',
         'LOGIN_SUCCESS',

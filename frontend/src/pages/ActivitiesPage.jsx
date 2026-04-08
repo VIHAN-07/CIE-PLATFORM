@@ -1,5 +1,5 @@
-// ==========================================
-// Activities Page — List + Create wizard
+﻿// ==========================================
+// Activities Page â€” List + Create wizard
 // ==========================================
 
 import { useState, useEffect } from 'react';
@@ -33,7 +33,6 @@ export default function ActivitiesPage() {
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ name: '', activityType: 'PPT', subjectName: '', classId: '', academicYearId: '', totalMarks: 10, topic: '' });
   const [activityTypes, setActivityTypes] = useState(DEFAULT_ACTIVITY_TYPES);
-  const [aiLoading, setAiLoading] = useState(false);
   const [facultyFilter, setFacultyFilter] = useState('all');
   const [facultySearch, setFacultySearch] = useState('');
 
@@ -85,23 +84,6 @@ export default function ActivitiesPage() {
       loadActivities();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Error');
-    }
-  };
-
-  const handleGenerateGuidelines = async () => {
-    if (!form.activityType || !form.topic) return toast.error('Set type & topic first');
-    setAiLoading(true);
-    try {
-      const { data } = await api.post('/ai/generate-guidelines', {
-        activityType: form.activityType,
-        topic: form.topic,
-      });
-      setForm((f) => ({ ...f, guidelines: data.guidelines }));
-      toast.success('Guidelines generated!');
-    } catch (err) {
-      toast.error('AI generation failed');
-    } finally {
-      setAiLoading(false);
     }
   };
 
@@ -166,7 +148,7 @@ export default function ActivitiesPage() {
           <input
             value={facultySearch}
             onChange={(e) => { setFacultySearch(e.target.value); setFacultyFilter('all'); }}
-            placeholder="🔍 Search faculty name..."
+            placeholder="ðŸ” Search faculty name..."
             className="input w-64"
           />
         </div>
@@ -182,7 +164,7 @@ export default function ActivitiesPage() {
               </div>
               <div>
                 <h2 className="text-lg font-semibold text-gray-800">{group.faculty.name}</h2>
-                <p className="text-xs text-gray-400">{group.faculty.email} · {group.items.length} activit{group.items.length === 1 ? 'y' : 'ies'}</p>
+                <p className="text-xs text-gray-400">{group.faculty.email} Â· {group.items.length} activit{group.items.length === 1 ? 'y' : 'ies'}</p>
               </div>
             </div>
           )}
@@ -233,7 +215,7 @@ export default function ActivitiesPage() {
         <form onSubmit={handleCreate} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="label">Activity Name</label>
+              <label className="label">CIE Title</label>
               <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required className="input" placeholder="e.g. CIE-1" />
             </div>
             <div>
@@ -267,23 +249,9 @@ export default function ActivitiesPage() {
           </div>
           <div>
             <label className="label">Topic</label>
-            <input value={form.topic} onChange={(e) => setForm({ ...form, topic: e.target.value })} className="input" placeholder="Activity topic (used for AI generation)" />
+            <input value={form.topic} onChange={(e) => setForm({ ...form, topic: e.target.value })} className="input" placeholder="Activity topic" />
           </div>
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="label mb-0">Guidelines</label>
-              <button type="button" onClick={handleGenerateGuidelines} disabled={aiLoading} className="text-xs text-primary-600 hover:underline">
-                {aiLoading ? '⏳ Generating...' : '✨ AI Generate'}
-              </button>
-            </div>
-            <textarea
-              value={form.guidelines || ''}
-              onChange={(e) => setForm({ ...form, guidelines: e.target.value })}
-              rows={4}
-              className="input"
-              placeholder="Activity conduction guidelines..."
-            />
-          </div>
+          
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={() => setShowModal(false)} className="btn-secondary">Cancel</button>
             <button type="submit" className="btn-primary">Create Activity</button>
@@ -293,3 +261,4 @@ export default function ActivitiesPage() {
     </div>
   );
 }
+

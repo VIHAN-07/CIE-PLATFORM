@@ -175,7 +175,7 @@ const schemas = {
       subjectName: trimStr.min(2).max(200),
       classId: objectId,
       academicYearId: objectId,
-      totalMarks: z.number().min(1).max(1000),
+      totalMarks: z.number().min(0.5).max(1000),
       topic: trimStr.max(500).optional().default(''),
       guidelines: z.string().max(10000).optional().default(''),
       videoUrl: youtubeUrlField.optional().default(''),
@@ -185,7 +185,7 @@ const schemas = {
   activityUpdate: z.object({
     body: z.object({
       name: trimStr.min(2).max(200).optional(),
-      totalMarks: z.number().min(1).max(1000).optional(),
+      totalMarks: z.number().min(0.5).max(1000).optional(),
       topic: trimStr.max(500).optional(),
       guidelines: z.string().max(10000).optional(),
       videoUrl: youtubeUrlField.optional(),

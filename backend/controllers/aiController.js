@@ -16,6 +16,29 @@ const { getRubricAverages, getScoreDistribution } = require('../services/scoring
 const audit = require('../services/auditService');
 const logger = require('../services/logger');
 
+function normalizeAreaList(input) {
+  if (Array.isArray(input)) {
+    return input
+      .map((item) => ({
+        rubricName: `${item?.rubricName || ''}`.trim(),
+        avgScore: Number(item?.avgScore),
+        suggestion: `${item?.suggestion || ''}`.trim(),
+      }))
+      .filter((item) => item.rubricName && Number.isFinite(item.avgScore));
+  }
+
+  if (input && typeof input === 'object') {
+    const one = {
+      rubricName: `${input.rubricName || ''}`.trim(),
+      avgScore: Number(input.avgScore),
+      suggestion: `${input.suggestion || ''}`.trim(),
+    };
+    return one.rubricName && Number.isFinite(one.avgScore) ? [one] : [];
+  }
+
+  return [];
+}
+
 /** POST /api/ai/generate-rubrics */
 exports.generateRubrics = async (req, res, next) => {
   try {
@@ -111,13 +134,28 @@ exports.generateClassInsights = async (req, res, next) => {
     const rubricAverages = await getRubricAverages(activityId);
     const result = await aiService.generateClassInsights(activity.name, rubricAverages);
 
+    const weakAreas = normalizeAreaList(result.weakAreas);
+    let strongAreas = normalizeAreaList(result.strongAreas);
+
+    // Ensure strong areas are still available even if provider omits them.
+    if (strongAreas.length === 0) {
+      strongAreas = rubricAverages
+        .filter((r) => Number(r.avgScore) >= 4)
+        .map((r) => ({
+          rubricName: r.rubricName,
+          avgScore: Number(r.avgScore),
+          suggestion: `Continue reinforcing this strong area: ${r.rubricName}.`,
+        }));
+    }
+
     // Save to DB
     await AIInsight.findOneAndUpdate(
       { activity: activityId },
       {
         subject: activity.subject,
         insights: result.insights,
-        weakAreas: result.weakAreas,
+        weakAreas,
+        strongAreas,
         generatedBy: req.user._id,
       },
       { upsert: true, new: true }
@@ -131,7 +169,12 @@ exports.generateClassInsights = async (req, res, next) => {
       description: `AI class insights generated for activity ${activity.name}`,
     });
 
-    res.json({ success: true, ...result });
+    res.json({
+      success: true,
+      insights: result.insights,
+      weakAreas,
+      strongAreas,
+    });
   } catch (err) {
     next(err);
   }

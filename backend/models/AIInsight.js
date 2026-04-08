@@ -27,6 +27,13 @@ const aiInsightSchema = new mongoose.Schema(
         suggestion: String,
       },
     ],
+    strongAreas: [
+      {
+        rubricName: String,
+        avgScore: Number,
+        suggestion: String,
+      },
+    ],
     generatedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

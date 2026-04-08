@@ -15,7 +15,13 @@ export function AuthProvider({ children }) {
     const stored = localStorage.getItem('user');
     const token = localStorage.getItem('token');
     if (stored && token) {
-      setUser(JSON.parse(stored));
+      try {
+        setUser(JSON.parse(stored));
+      } catch {
+        // Clear invalid persisted auth payloads to avoid white-screen crashes.
+        localStorage.removeItem('user');
+        localStorage.removeItem('token');
+      }
     }
     setLoading(false);
   }, []);

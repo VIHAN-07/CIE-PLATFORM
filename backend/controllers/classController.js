@@ -34,6 +34,7 @@ exports.getById = async (req, res, next) => {
 exports.create = async (req, res, next) => {
   try {
     const { name, academicYear, department } = req.body;
+
     const cls = await Class.create({ name, academicYear, department });
     res.status(201).json(cls);
   } catch (err) {
