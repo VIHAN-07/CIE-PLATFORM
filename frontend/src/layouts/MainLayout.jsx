@@ -90,7 +90,7 @@ export default function MainLayout() {
         />
       )}
 
-      <aside className={`fixed inset-y-0 left-0 z-40 w-72 transform bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 p-4 shadow-2xl transition-transform duration-200 lg:translate-x-0 ${isMobileNavOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <aside className={`fixed inset-y-0 left-0 z-40 flex h-full w-72 transform flex-col bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 p-4 shadow-2xl transition-transform duration-200 lg:translate-x-0 ${isMobileNavOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="mb-4 flex items-start justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.25em] text-sky-200/80">PICT</p>
@@ -107,40 +107,42 @@ export default function MainLayout() {
           </button>
         </div>
 
-        <div className="mb-4 rounded-2xl border border-white/15 bg-white/10 p-3 text-slate-100">
-          <div className="text-xs uppercase tracking-wide text-sky-100/90">Current Role</div>
-          <div className="mt-1 text-sm font-medium capitalize">{user?.role || 'faculty'}</div>
-          <div className="mt-3 flex items-center gap-2 text-xs text-slate-300">
-            <HiOutlineCalendar className="h-4 w-4" />
-            {todayLabel}
+        <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+          <div className="mb-4 rounded-2xl border border-white/15 bg-white/10 p-3 text-slate-100">
+            <div className="text-xs uppercase tracking-wide text-sky-100/90">Current Role</div>
+            <div className="mt-1 text-sm font-medium capitalize">{user?.role || 'faculty'}</div>
+            <div className="mt-3 flex items-center gap-2 text-xs text-slate-300">
+              <HiOutlineCalendar className="h-4 w-4" />
+              {todayLabel}
+            </div>
           </div>
-        </div>
 
-        <nav className="flex-1 space-y-1 overflow-y-auto pr-1">
-          <p className="px-2 pb-1 text-[11px] uppercase tracking-[0.2em] text-slate-400">Workspace</p>
-          {primaryNavigation.map(({ to, label, Icon }) => (
-            <NavLink key={to} to={to} end={to === '/'} className={navItemClass} onClick={closeMobileNav}>
-              <Icon className="h-5 w-5" /> {label}
+          <nav className="space-y-1">
+            <p className="px-2 pb-1 text-[11px] uppercase tracking-[0.2em] text-slate-400">Workspace</p>
+            {primaryNavigation.map(({ to, label, Icon }) => (
+              <NavLink key={to} to={to} end={to === '/'} className={navItemClass} onClick={closeMobileNav}>
+                <Icon className="h-5 w-5" /> {label}
+              </NavLink>
+            ))}
+
+            {secondaryNavigation.length > 0 && (
+              <>
+                <p className="px-2 pb-1 pt-4 text-[11px] uppercase tracking-[0.2em] text-slate-400">Operations</p>
+                {secondaryNavigation.map(({ to, label, Icon }) => (
+                  <NavLink key={to} to={to} className={navItemClass} onClick={closeMobileNav}>
+                    <Icon className="h-5 w-5" /> {label}
+                  </NavLink>
+                ))}
+              </>
+            )}
+          </nav>
+
+          <div className="mt-3 rounded-2xl border border-white/15 bg-white/10 p-3 text-slate-100">
+            <p className="text-xs text-slate-300">Quick Action</p>
+            <NavLink to="/activities?create=1" className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-100" onClick={closeMobileNav}>
+              <HiOutlinePlusCircle className="h-5 w-5" /> Create Activity
             </NavLink>
-          ))}
-
-          {secondaryNavigation.length > 0 && (
-            <>
-              <p className="px-2 pb-1 pt-4 text-[11px] uppercase tracking-[0.2em] text-slate-400">Operations</p>
-              {secondaryNavigation.map(({ to, label, Icon }) => (
-                <NavLink key={to} to={to} className={navItemClass} onClick={closeMobileNav}>
-                  <Icon className="h-5 w-5" /> {label}
-                </NavLink>
-              ))}
-            </>
-          )}
-        </nav>
-
-        <div className="mt-3 rounded-2xl border border-white/15 bg-white/10 p-3 text-slate-100">
-          <p className="text-xs text-slate-300">Quick Action</p>
-          <NavLink to="/activities?create=1" className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-100" onClick={closeMobileNav}>
-            <HiOutlinePlusCircle className="h-5 w-5" /> Create Activity
-          </NavLink>
+          </div>
         </div>
 
         <div className="mt-3 border-t border-white/15 pt-3">
